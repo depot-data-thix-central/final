@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../models/book.dart';
+import '../../theme/thix_policy.dart'; // Ajuste le chemin selon ton arborescence
 
 class AuthorLibraryPage extends StatelessWidget {
   final String author;
@@ -18,37 +20,56 @@ class AuthorLibraryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    // Logique basique de pluriel (si tu n'utilises pas la vraie syntaxe intl plural)
+    final bookLabel = books.length > 1 ? l10n.books : l10n.book;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: ThixPolicy.surfaceSoft,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
+        backgroundColor: ThixPolicy.inkDeep,
+        foregroundColor: ThixPolicy.onBrand,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               author,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
+              style: ThixPolicy.titleStyle.copyWith(
+                fontWeight: ThixPolicy.bold,
+                color: ThixPolicy.onBrand,
               ),
             ),
             Text(
-              'Étagère $shelfCode · \( {books.length} livre \){books.length > 1 ? 's' : ''}',
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
+              '${l10n.shelf} $shelfCode · ${books.length} $bookLabel',
+              style: ThixPolicy.captionStyle.copyWith(
+                color: ThixPolicy.onBrand.withOpacity(0.7),
+              ),
             ),
           ],
         ),
       ),
       body: books.isEmpty
-          ? const Center(child: Text('Aucun livre'))
+          ? Center(
+              child: Text(
+                l10n.noBooksAvailable,
+                style: ThixPolicy.bodyStyle.copyWith(
+                  color: ThixPolicy.textSecondary,
+                ),
+              ),
+            )
           : GridView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              padding: const EdgeInsets.fromLTRB(
+                ThixPolicy.s16, 
+                ThixPolicy.s16, 
+                ThixPolicy.s16, 
+                100,
+              ),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 childAspectRatio: 0.65,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
+                crossAxisSpacing: ThixPolicy.s14,
+                mainAxisSpacing: ThixPolicy.s14,
               ),
               itemCount: books.length,
               itemBuilder: (context, i) {
@@ -61,15 +82,9 @@ class AuthorLibraryPage extends StatelessWidget {
                   onTap: () => context.push('/education/book/${book.id}'),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+                      color: ThixPolicy.card,
+                      borderRadius: BorderRadius.circular(ThixPolicy.rSm),
+                      boxShadow: ThixPolicy.shadowSoft(),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -81,7 +96,8 @@ class AuthorLibraryPage extends StatelessWidget {
                             children: [
                               ClipRRect(
                                 borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(12)),
+                                  top: Radius.circular(ThixPolicy.rSm),
+                                ),
                                 child: book.imageUrl != null &&
                                         book.imageUrl!.isNotEmpty
                                     ? Image.network(
@@ -89,57 +105,60 @@ class AuthorLibraryPage extends StatelessWidget {
                                         fit: BoxFit.cover,
                                       )
                                     : Container(
-                                        color: const Color(0xFF0F172A),
+                                        color: ThixPolicy.inkDeep,
                                         child: const Icon(
                                           Icons.menu_book,
-                                          color: Colors.white,
-                                          size: 40,
+                                          color: ThixPolicy.onBrand,
+                                          size: ThixPolicy.s40,
                                         ),
                                       ),
                               ),
                               Positioned(
-                                top: 8,
-                                right: 8,
+                                top: ThixPolicy.s8,
+                                right: ThixPolicy.s8,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 3),
+                                    horizontal: ThixPolicy.s6, 
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: isFree
-                                        ? Colors.green.shade600
-                                        : const Color(0xFF0284C7),
+                                        ? ThixPolicy.success
+                                        : ThixPolicy.primary,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
                                     isFree
-                                        ? 'Gratuit'
+                                        ? l10n.free
                                         : '${book.price.toStringAsFixed(0)} ${book.currency}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
+                                    style: ThixPolicy.microStyle.copyWith(
+                                      color: ThixPolicy.onBrand,
+                                      fontWeight: ThixPolicy.bold,
                                     ),
                                   ),
                                 ),
                               ),
                               if (isDeleting)
                                 Positioned(
-                                  left: 6,
-                                  right: 6,
-                                  bottom: 6,
+                                  left: ThixPolicy.s6,
+                                  right: ThixPolicy.s6,
+                                  bottom: ThixPolicy.s6,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 4, vertical: 3),
+                                      horizontal: ThixPolicy.s4, 
+                                      vertical: 3,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFDC2626),
+                                      color: ThixPolicy.danger,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: const Text(
-                                      'Suppression programmée',
+                                    child: Text(
+                                      l10n.scheduledDeletion,
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
+                                      style: ThixPolicy.microStyle.copyWith(
+                                        color: ThixPolicy.onBrand,
+                                        fontWeight: ThixPolicy.bold,
+                                        fontSize: 9, // Forcé petit pour ce badge critique
                                       ),
                                     ),
                                   ),
@@ -150,7 +169,7 @@ class AuthorLibraryPage extends StatelessWidget {
                         Expanded(
                           flex: 3,
                           child: Padding(
-                            padding: const EdgeInsets.all(10),
+                            padding: const EdgeInsets.all(ThixPolicy.s10),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -158,22 +177,17 @@ class AuthorLibraryPage extends StatelessWidget {
                                   book.title,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
-                                    color: Color(0xFF0F172A),
+                                  style: ThixPolicy.bodyMediumStyle.copyWith(
+                                    fontWeight: ThixPolicy.bold,
                                     height: 1.2,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: ThixPolicy.s4),
                                 Text(
                                   book.author,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey,
-                                  ),
+                                  style: ThixPolicy.captionStyle,
                                 ),
                               ],
                             ),
