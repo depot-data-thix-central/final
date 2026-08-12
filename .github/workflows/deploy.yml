@@ -43,7 +43,7 @@ jobs:
       - name: Build Web (CanvasKit)
         run: |
           flutter build web --release \
-            --base-href /sona1/ \
+            --base-href /final/
             --no-wasm-dry-run
 
       - name: Deploy to GitHub Pages (Branch gh-pages)
