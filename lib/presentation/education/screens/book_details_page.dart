@@ -214,7 +214,62 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
       ),
     );
   }
+Widget _buildDeletionAlert(Map<String, dynamic> book) {
+  final scheduled = book['scheduled_deletion_at'];
+  if (scheduled == null) return const SizedBox.shrink();
 
+  final deletionDate = DateTime.parse(scheduled);
+  final remaining = deletionDate.difference(DateTime.now());
+
+  if (remaining.isNegative) return const SizedBox.shrink();
+
+  final days = remaining.inDays;
+  final hours = remaining.inHours % 24;
+
+  return Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFEF3C7),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFF59E0B)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.warning_amber_rounded,
+            color: Color(0xFFD97706), size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Alerte',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: Color(0xFF92400E),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ce livre ne sera plus accessible dans : '
+                '${days}j ${hours}h',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF92400E),
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
   Widget _placeholderCover() {
     return Container(
       height: 220,
