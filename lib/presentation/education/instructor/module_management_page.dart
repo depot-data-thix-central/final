@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/presentation/education/models/module.dart';
 import 'package:thix_id/presentation/education/models/lesson.dart';
 import 'package:thix_id/presentation/education/instructor/content/lesson_management_page.dart';
-import 'package:thix_id/presentation/education/instructor/evaluations/question_management_page.dart'; 
+import 'package:thix_id/presentation/education/instructor/evaluations/question_management_page.dart';
 
 class ModuleManagementPage extends StatefulWidget {
   final Module? module;
@@ -22,6 +22,7 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
   final _descriptionController = TextEditingController();
   bool _isLoading = false;
   List<Lesson> _lessons = [];
+  String? _savedModuleId; // ID après sauvegarde en base
 
   @override
   void initState() {
@@ -30,6 +31,9 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
       _titleController.text = widget.module!.title;
       _descriptionController.text = widget.module!.description ?? '';
       _lessons = List.from(widget.module!.lessons ?? []);
+      if (widget.module!.id.isNotEmpty) {
+        _savedModuleId = widget.module!.id;
+      }
     }
   }
 
@@ -40,101 +44,169 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
     super.dispose();
   }
 
+  /// UUID réel du module, ou null (jamais '')
+  String? get _validModuleId {
+    final id = _savedModuleId ?? widget.module?.id;
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
+
   Future<void> _saveModule() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    
+
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      final formationId =
+          widget.courseId ?? widget.module?.formationId ?? '';
+      if (formationId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Formation parent manquante.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final data = {
+        'formation_id': formationId,
+        'title': _titleController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'order': widget.module?.order ?? 0,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      String moduleId = _validModuleId ?? '';
+
+      if (moduleId.isEmpty) {
+        data['created_at'] = DateTime.now().toIso8601String();
+        final res = await Supabase.instance.client
+            .from('modules')
+            .insert(data)
+            .select()
+            .single();
+        moduleId = res['id'] as String;
+      } else {
+        await Supabase.instance.client
+            .from('modules')
+            .update(data)
+            .eq('id', moduleId);
+      }
+
+      setState(() => _savedModuleId = moduleId);
 
       final moduleToSave = Module(
-        id: widget.module?.id ?? '',
-        formationId: widget.courseId ?? widget.module?.formationId ?? '',
-        title: _titleController.text,
-        description: _descriptionController.text,
+        id: moduleId,
+        formationId: formationId,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
         order: widget.module?.order ?? 0,
         lessons: _lessons,
       );
 
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Module enregistré !'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
       Navigator.pop(context, moduleToSave);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _addLesson() async {
+    if (_validModuleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Enregistrez d\'abord le module (icône disquette), puis ajoutez des leçons.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     final newLesson = await Navigator.push<Lesson>(
-      context, 
+      context,
       MaterialPageRoute(
         builder: (_) => LessonManagementPage(
-          moduleId: widget.module?.id ?? '',
-        )
-      )
+          moduleId: _validModuleId,
+        ),
+      ),
     );
-    
+
     if (newLesson != null && mounted) {
       setState(() => _lessons.add(newLesson));
     }
   }
 
   void _editLesson(Lesson lesson) async {
-    // 1. Si la leçon est un Quiz (ou evaluation)
     if (lesson.type == 'quiz' || lesson.type == 'evaluation') {
       setState(() => _isLoading = true);
       String currentLessonId = lesson.id;
 
       try {
-        // 🔒 CORRECTION : Si la leçon n'a pas encore d'ID en base, on l'insère d'office pour éviter l'erreur
         if (currentLessonId.isEmpty) {
-          final targetModuleId = widget.module?.id;
-          if (targetModuleId == null || targetModuleId.isEmpty) {
+          final targetModuleId = _validModuleId;
+          if (targetModuleId == null) {
             ScaffoldMessenger.of(context).showSnackBar(
-              constSnackBar(content: const Text('Veuillez d\'abord donner un titre et enregistrer/fermer le module parent.'), backgroundColor: Colors.red),
+              const SnackBar(
+                content: Text('Enregistrez d\'abord le module parent.'),
+                backgroundColor: Colors.red,
+              ),
             );
-            setState(() => _isLoading = false);
             return;
           }
 
-          final newLessonRes = await Supabase.instance.client.from('lessons').insert({
-            'module_id': targetModuleId,
-            'title': lesson.title,
-            'description': lesson.description ?? '',
-            'type': lesson.type,
-            'duration_minutes': lesson.durationMinutes,
-            'content': lesson.content ?? '',
-            'order': lesson.order,
-            'created_at': DateTime.now().toIso8601String(),
-          }).select('id').single();
+          final newLessonRes = await Supabase.instance.client
+              .from('lessons')
+              .insert({
+                'module_id': targetModuleId,
+                'title': lesson.title,
+                'description': lesson.description ?? '',
+                'type': lesson.type,
+                'duration_minutes': lesson.durationMinutes,
+                'content': lesson.content ?? '',
+                'order': lesson.order,
+                'created_at': DateTime.now().toIso8601String(),
+              })
+              .select('id')
+              .single();
 
-          currentLessonId = newLessonRes['id'];
-          
-          // Met à jour l'ID localement dans la liste
-          final index = _lessons.indexOf(lesson);
+          currentLessonId = newLessonRes['id'] as String;
+
+          final index = _lessons.indexWhere(
+            (l) =>
+                (l.id.isEmpty && l.title == lesson.title) ||
+                identical(l, lesson),
+          );
           if (index != -1) {
             setState(() {
               _lessons[index] = lesson.copyWith(id: currentLessonId);
-              lesson = _lessons[index];
             });
           }
         }
-        
-        String? targetEvaluationId;
 
-        // 2. Chercher si une évaluation existe déjà pour cette leçon
+        String? targetEvaluationId;
         final evalList = await Supabase.instance.client
             .from('evaluations')
             .select('id')
             .eq('lesson_id', currentLessonId)
             .maybeSingle();
 
-        if (evalList != null && evalList.isNotEmpty) {
-          targetEvaluationId = evalList['id'];
+        if (evalList != null) {
+          targetEvaluationId = evalList['id'] as String;
         } else {
-          // 3. Créer une nouvelle évaluation si elle n'existe pas
           final evalRes = await Supabase.instance.client
               .from('evaluations')
               .insert({
@@ -144,15 +216,15 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
               })
               .select('id')
               .single();
-          targetEvaluationId = evalRes['id'];
+          targetEvaluationId = evalRes['id'] as String;
         }
 
         if (targetEvaluationId != null && mounted) {
-          // Ouvrir le gestionnaire de questions
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => QuestionManagementPage(evaluationId: targetEvaluationId!),
+              builder: (_) =>
+                  QuestionManagementPage(evaluationId: targetEvaluationId!),
             ),
           );
         }
@@ -160,26 +232,31 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
         debugPrint('Erreur init quiz: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Impossible d\'initialiser le quiz. Vérifiez la connexion.'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Impossible d\'initialiser le quiz : $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
     } else {
-      // Pour les autres types (video, texte...), ouvrir l'éditeur de leçon standard
       final updatedLesson = await Navigator.push<Lesson>(
-        context, 
+        context,
         MaterialPageRoute(
           builder: (_) => LessonManagementPage(
-            moduleId: widget.module?.id ?? '',
+            moduleId: _validModuleId,
             lesson: lesson,
-          )
-        )
+          ),
+        ),
       );
-      
+
       if (updatedLesson != null && mounted) {
-        final index = _lessons.indexOf(lesson);
+        final index = _lessons.indexWhere(
+          (l) =>
+              (l.id.isNotEmpty && l.id == lesson.id) || identical(l, lesson),
+        );
         if (index != -1) {
           setState(() => _lessons[index] = updatedLesson);
         }
@@ -196,17 +273,32 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(widget.module == null ? 'Ajouter un module' : 'Modifier le module', style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0F172A), fontSize: 18)),
+        title: Text(
+          widget.module == null ? 'Ajouter un module' : 'Modifier le module',
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF0F172A),
+            fontSize: 18,
+          ),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0F172A)), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0F172A)),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
-          IconButton(icon: const Icon(Icons.save_rounded, color: Color(0xFF2D6CDF)), onPressed: _isLoading ? null : _saveModule),
+          IconButton(
+            icon: const Icon(Icons.save_rounded, color: Color(0xFF2D6CDF)),
+            onPressed: _isLoading ? null : _saveModule,
+            tooltip: 'Enregistrer le module',
+          ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2D6CDF)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2D6CDF)))
           : Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -214,23 +306,40 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE2E8F0))),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
                     child: Form(
                       key: _formKey,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Configuration', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Color(0xFF0F172A))),
+                          const Text(
+                            'Configuration',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: _titleController,
                             decoration: InputDecoration(
                               labelText: 'Titre du module*',
-                              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                              filled: true, fillColor: const Color(0xFFF8FAFC),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                              labelStyle:
+                                  const TextStyle(color: Color(0xFF64748B)),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
-                            validator: (v) => v!.isEmpty ? 'Requis' : null,
+                            validator: (v) =>
+                                v == null || v.isEmpty ? 'Requis' : null,
                           ),
                           const SizedBox(height: 12),
                           TextFormField(
@@ -238,11 +347,41 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
                             maxLines: 3,
                             decoration: InputDecoration(
                               labelText: 'Description',
-                              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                              filled: true, fillColor: const Color(0xFFF8FAFC),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                              labelStyle:
+                                  const TextStyle(color: Color(0xFF64748B)),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
+                          if (_validModuleId != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.check_circle,
+                                      color: Color(0xFF10B981), size: 18),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Module enregistré — vous pouvez ajouter des leçons',
+                                    style: TextStyle(
+                                      color: Color(0xFF059669),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -251,40 +390,100 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Leçons', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+                      const Text(
+                        'Leçons',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
                       ElevatedButton.icon(
                         onPressed: _addLesson,
                         icon: const Icon(Icons.add_rounded, size: 18),
                         label: const Text('Ajouter'),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2D6CDF), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D6CDF),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Expanded(
                     child: _lessons.isEmpty
-                        ? const Center(child: Text('Aucune leçon. Ajoutez-en une.', style: TextStyle(color: Color(0xFF64748B))))
+                        ? const Center(
+                            child: Text(
+                              'Aucune leçon. Enregistrez le module puis ajoutez-en.',
+                              style: TextStyle(color: Color(0xFF64748B)),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
                         : ListView.builder(
                             itemCount: _lessons.length,
                             itemBuilder: (context, index) {
                               final lesson = _lessons[index];
-                              final isQuiz = lesson.type == 'quiz' || lesson.type == 'evaluation';
+                              final isQuiz = lesson.type == 'quiz' ||
+                                  lesson.type == 'evaluation';
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: const Color(0xFFE2E8F0)),
+                                ),
                                 child: ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
                                   leading: CircleAvatar(
-                                    backgroundColor: isQuiz ? const Color(0xFFF59E0B).withOpacity(0.1) : const Color(0xFF2D6CDF).withOpacity(0.1),
-                                    child: Icon(isQuiz ? Icons.quiz_rounded : Icons.play_arrow_rounded, color: isQuiz ? const Color(0xFFF59E0B) : const Color(0xFF2D6CDF)),
+                                    backgroundColor: isQuiz
+                                        ? const Color(0xFFF59E0B)
+                                            .withOpacity(0.1)
+                                        : const Color(0xFF2D6CDF)
+                                            .withOpacity(0.1),
+                                    child: Icon(
+                                      isQuiz
+                                          ? Icons.quiz_rounded
+                                          : Icons.play_arrow_rounded,
+                                      color: isQuiz
+                                          ? const Color(0xFFF59E0B)
+                                          : const Color(0xFF2D6CDF),
+                                    ),
                                   ),
-                                  title: Text(lesson.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                                  subtitle: Text(isQuiz ? 'Évaluation (Quiz)' : 'Leçon standard', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                  title: Text(
+                                    lesson.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    isQuiz
+                                        ? 'Évaluation (Quiz)'
+                                        : 'Leçon standard',
+                                    style: const TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      IconButton(icon: const Icon(Icons.edit_rounded, color: Color(0xFF64748B)), onPressed: () => _editLesson(lesson)),
-                                      IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)), onPressed: () => _deleteLesson(lesson)),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_rounded,
+                                            color: Color(0xFF64748B)),
+                                        onPressed: () => _editLesson(lesson),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                            Icons.delete_outline_rounded,
+                                            color: Color(0xFFEF4444)),
+                                        onPressed: () => _deleteLesson(lesson),
+                                      ),
                                     ],
                                   ),
                                   onTap: () => _editLesson(lesson),
