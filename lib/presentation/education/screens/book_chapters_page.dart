@@ -9,8 +9,8 @@ import '../models/book_chapter.dart';
 import '../models/book_section.dart';
 import '../services/book_content_service.dart';
 
-// 👇 L'import qui manquait pour résoudre l'erreur
-import '../../../theme/thix_policy.dart'; 
+// 👇 L'import corrigé avec le chemin exact
+import 'package:thix_id/core/theme/thix_design_policy.dart'; 
 
 final bookChaptersProvider =
     FutureProvider.family<List<BookChapter>, String>((ref, bookId) async {
