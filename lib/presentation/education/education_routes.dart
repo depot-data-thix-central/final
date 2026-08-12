@@ -14,7 +14,7 @@ import 'package:thix_id/presentation/education/pages/certificate_detail_page.dar
 import 'package:thix_id/presentation/education/pages/forum_topic_detail_page.dart';
 import 'package:thix_id/presentation/education/pages/recommendations_page.dart';
 import 'package:thix_id/presentation/education/models/certificate.dart';
-
+import 'package:thix_id/presentation/education/book_details_page.dart';
 // Lecteur de leçon
 import 'package:thix_id/presentation/education/widgets/formation_detail/formation_lesson_player.dart';
 
@@ -94,6 +94,13 @@ List<GoRoute> instructorRoutes = [
     final id = state.pathParameters['courseId']!;
     return NoTransitionPage(child: CourseCreatePage(courseId: id));
   }),
+  GoRoute(
+  path: '/education/book/:bookId',
+  builder: (context, state) {
+    final bookId = state.pathParameters['bookId']!;
+    return BookDetailsPage(bookId: bookId);
+  },
+),
   GoRoute(path: '/instructor/content/modules/:courseId', name: 'instructorCourseModules', pageBuilder: (_, state) {
     final id = state.pathParameters['courseId']!;
     return NoTransitionPage(child: ModuleManagementPage(courseId: id));
