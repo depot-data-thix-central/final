@@ -9,18 +9,17 @@ import 'package:thix_id/presentation/education/screens/education_all_formations.
 import 'package:thix_id/presentation/education/screens/education_my_learning.dart';
 import 'package:thix_id/presentation/education/screens/education_certificates.dart';
 import 'package:thix_id/presentation/education/screens/education_forum.dart';
+import 'package:thix_id/presentation/education/screens/book_details_page.dart'; // ✅ CORRIGÉ
 import 'package:thix_id/presentation/education/pages/formation_detail_page.dart';
 import 'package:thix_id/presentation/education/pages/certificate_detail_page.dart';
 import 'package:thix_id/presentation/education/pages/forum_topic_detail_page.dart';
 import 'package:thix_id/presentation/education/pages/recommendations_page.dart';
 import 'package:thix_id/presentation/education/models/certificate.dart';
-import 'package:thix_id/presentation/education/book_details_page.dart';
 // Lecteur de leçon
 import 'package:thix_id/presentation/education/widgets/formation_detail/formation_lesson_player.dart';
 
 // Formateur – routes fonctionnelles
 import 'package:thix_id/presentation/education/instructor/dashboard/instructor_dashboard.dart';
-// ✅ CORRECTION : Import de la vraie page de gestion des cours
 import 'package:thix_id/presentation/education/instructor/course_management_page.dart';
 import 'package:thix_id/presentation/education/instructor/courses/course_create_page.dart';
 import 'package:thix_id/presentation/education/instructor/content/module_management_page.dart';
@@ -79,6 +78,16 @@ List<GoRoute> educationRoutes = [
         return NoTransitionPage(child: ForumTopicDetailPage(topicId: id));
       }),
       GoRoute(path: 'recommendations', name: 'educationRecommendations', pageBuilder: (_, __) => const NoTransitionPage(child: RecommendationsPage())),
+
+      // ✅ Route BookDetailsPage (placée correctement ici)
+      GoRoute(
+        path: 'book/:bookId',
+        name: 'educationBookDetails',
+        pageBuilder: (context, state) {
+          final bookId = state.pathParameters['bookId']!;
+          return NoTransitionPage(child: BookDetailsPage(bookId: bookId));
+        },
+      ),
     ],
   ),
 ];
@@ -86,7 +95,6 @@ List<GoRoute> educationRoutes = [
 List<GoRoute> instructorRoutes = [
   GoRoute(path: '/instructor/dashboard', name: 'instructorDashboard', pageBuilder: (_, __) => const NoTransitionPage(child: InstructorDashboard())),
   
-  // ✅ CORRECTION : Utilisation de CourseManagementPage
   GoRoute(path: '/instructor/courses', name: 'instructorCourses', pageBuilder: (_, __) => const NoTransitionPage(child: CourseManagementPage())),
   
   GoRoute(path: '/instructor/courses/create', name: 'instructorCreateCourse', pageBuilder: (_, __) => const NoTransitionPage(child: CourseCreatePage())),
@@ -94,13 +102,6 @@ List<GoRoute> instructorRoutes = [
     final id = state.pathParameters['courseId']!;
     return NoTransitionPage(child: CourseCreatePage(courseId: id));
   }),
-  GoRoute(
-  path: '/education/book/:bookId',
-  builder: (context, state) {
-    final bookId = state.pathParameters['bookId']!;
-    return BookDetailsPage(bookId: bookId);
-  },
-),
   GoRoute(path: '/instructor/content/modules/:courseId', name: 'instructorCourseModules', pageBuilder: (_, state) {
     final id = state.pathParameters['courseId']!;
     return NoTransitionPage(child: ModuleManagementPage(courseId: id));
