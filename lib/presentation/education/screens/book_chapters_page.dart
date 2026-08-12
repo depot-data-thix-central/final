@@ -3,9 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../models/book_chapter.dart';
 import '../models/book_section.dart';
 import '../services/book_content_service.dart';
+import '../../theme/thix_policy.dart';
 
 final bookChaptersProvider =
     FutureProvider.family<List<BookChapter>, String>((ref, bookId) async {
@@ -27,31 +29,21 @@ class BookChaptersPage extends ConsumerWidget {
     super.key,
   });
 
-  static const Color navyDeep = Color(0xFF0A1F44);
-  static const Color primaryBlue = Color(0xFF2D6CDF);
-  static const Color ivory = Color(0xFFF6F7FB);
-  static const Color pureWhite = Color(0xFFFFFFFF);
-  static const Color darkText = Color(0xFF10182B);
-  static const Color mutedText = Color(0xFF6B7690);
-  static const Color hairline = Color(0xFFE7EAF3);
-  static const Color gold = Color(0xFFE3B23C);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chaptersAsync = ref.watch(bookChaptersProvider(bookId));
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      backgroundColor: ivory,
+      backgroundColor: ThixPolicy.surfaceSoft,
       appBar: AppBar(
-        backgroundColor: navyDeep,
+        backgroundColor: ThixPolicy.inkDeep,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: ThixPolicy.onBrand),
         title: Text(
-          bookTitle ?? 'Chapitres',
-          style: const TextStyle(
-            fontSize: 16.5,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
+          bookTitle ?? l10n.chapters,
+          style: ThixPolicy.titleStyle.copyWith(
+            color: ThixPolicy.onBrand,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -59,19 +51,26 @@ class BookChaptersPage extends ConsumerWidget {
       ),
       body: chaptersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erreur : $e')),
+        error: (e, _) => Center(child: Text('${l10n.error} : $e')),
         data: (chapters) {
           if (chapters.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
-                'Aucun chapitre disponible pour ce livre.',
-                style: TextStyle(color: mutedText),
+                l10n.noChaptersAvailable,
+                style: ThixPolicy.bodyStyle.copyWith(
+                  color: ThixPolicy.textSecondary,
+                ),
               ),
             );
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: const EdgeInsets.fromLTRB(
+              ThixPolicy.s16,
+              ThixPolicy.s16,
+              ThixPolicy.s16,
+              ThixPolicy.s32,
+            ),
             itemCount: chapters.length,
             itemBuilder: (context, index) {
               final chapter = chapters[index];
@@ -97,73 +96,68 @@ class _ChapterCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sectionsAsync =
         ref.watch(bookSectionsByChapterProvider(chapter.id));
+    final l10n = AppLocalizations.of(context)!;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: ThixPolicy.s14),
       decoration: BoxDecoration(
-        color: BookChaptersPage.pureWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: BookChaptersPage.hairline),
-        boxShadow: [
-          BoxShadow(
-            color: BookChaptersPage.navyDeep.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: ThixPolicy.card,
+        borderRadius: BorderRadius.circular(ThixPolicy.rMd),
+        border: Border.all(color: ThixPolicy.border),
+        boxShadow: ThixPolicy.shadowSoft(opacity: 0.04),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          tilePadding: const EdgeInsets.symmetric(
+            horizontal: ThixPolicy.s16,
+            vertical: ThixPolicy.s4,
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(
+            ThixPolicy.s12,
+            0,
+            ThixPolicy.s12,
+            ThixPolicy.s12,
+          ),
           leading: Container(
-            width: 40,
-            height: 40,
+            width: ThixPolicy.s40,
+            height: ThixPolicy.s40,
             decoration: BoxDecoration(
-              color: BookChaptersPage.navyDeep.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(10),
+              color: ThixPolicy.inkDeep.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(ThixPolicy.rSm),
             ),
             child: Center(
               child: Text(
                 '${chapter.chapterNumber}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: BookChaptersPage.navyDeep,
-                  fontSize: 15,
+                style: ThixPolicy.titleStyle.copyWith(
+                  fontWeight: ThixPolicy.bold,
+                  color: ThixPolicy.inkDeep,
                 ),
               ),
             ),
           ),
           title: Text(
             chapter.title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              color: BookChaptersPage.darkText,
-            ),
+            style: ThixPolicy.titleStyle,
           ),
           subtitle: Text(
-            'Chapitre ${chapter.chapterNumber}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: BookChaptersPage.mutedText,
-            ),
+            '${l10n.chapter} ${chapter.chapterNumber}',
+            style: ThixPolicy.captionStyle,
           ),
           children: [
             sectionsAsync.when(
               loading: () => const Padding(
-                padding: EdgeInsets.all(12),
+                padding: EdgeInsets.all(ThixPolicy.s12),
                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               ),
-              error: (e, _) => Text('Erreur : $e'),
+              error: (e, _) => Text('${l10n.error} : $e'),
               data: (sections) {
                 if (sections.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(12),
+                  return Padding(
+                    padding: const EdgeInsets.all(ThixPolicy.s12),
                     child: Text(
-                      'Aucune section dans ce chapitre.',
-                      style: TextStyle(color: BookChaptersPage.mutedText),
+                      l10n.noSectionsAvailable,
+                      style: ThixPolicy.bodySmallStyle,
                     ),
                   );
                 }
@@ -172,24 +166,28 @@ class _ChapterCard extends ConsumerWidget {
                   children: sections.map((section) {
                     return ListTile(
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: ThixPolicy.s8,
+                        vertical: ThixPolicy.s2,
+                      ),
                       leading: const Icon(
                         Icons.article_outlined,
-                        size: 20,
-                        color: BookChaptersPage.primaryBlue,
+                        size: ThixPolicy.s20,
+                        color: ThixPolicy.primary,
                       ),
                       title: Text(
                         section.title ??
-                            'Section ${section.sectionNumber ?? ''}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                            '${l10n.section} ${section.sectionNumber ?? ''}',
+                        style: ThixPolicy.bodyMediumStyle.copyWith(
+                          fontWeight: ThixPolicy.semiBold,
                         ),
                       ),
                       subtitle: section.sectionNumber != null
                           ? Text('§ ${section.sectionNumber}')
                           : null,
-                      trailing: const Icon(Icons.chevron_right, size: 20),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        size: ThixPolicy.s20,
+                      ),
                       onTap: () {
                         context.push(
                           '/education/section/${section.id}',
