@@ -204,11 +204,11 @@ class _ModuleManagementPageState extends State<ModuleManagementPage> {
           targetEvaluationId = evalList['id'] as String;
         } else {
           final evalRes = await Supabase.instance.client
-              .from('evaluations')
-              .insert({
-                'lesson_id': currentLessonId,
-                'title': 'Quiz - ${lesson.title}',
-                'type': lesson.type,
+    .from('evaluations')
+    .insert({
+      'lesson_id': currentLessonId,
+      'title': 'Quiz - ${lesson.title}',
+      'passing_score': 50,
               })
               .select('id')
               .single();
