@@ -1,3 +1,5 @@
+// lib/presentation/education/screens/book_details_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,9 +31,8 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
     try {
       final userId = _db.auth.currentUser?.id;
 
-      // Charger le livre
       final bookRes = await _db
-          .from('books') // adapte le nom de ta table si besoin
+          .from('books')
           .select()
           .eq('id', widget.bookId)
           .maybeSingle();
@@ -48,7 +49,7 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
       bool purchased = false;
       if (!isFree && userId != null) {
         final purchase = await _db
-            .from('book_purchases') // adapte le nom de ta table
+            .from('book_purchases')
             .select()
             .eq('book_id', widget.bookId)
             .eq('user_id', userId)
@@ -67,13 +68,15 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
     }
   }
 
-  void _goToReader() {
-    // Change cette route selon ton lecteur
-    context.push('/education/reader/${widget.bookId}');
+  void _goToChapters() {
+    final title = _book?['title'] ?? 'Livre';
+    context.push(
+      '/education/book/${widget.bookId}/chapters',
+      extra: {'title': title},
+    );
   }
 
   void _goToPayment() {
-    // Change selon ta page de paiement
     context.push('/payment', extra: {
       'type': 'book',
       'id': widget.bookId,
@@ -100,7 +103,7 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
     final title = _book!['title'] ?? 'Sans titre';
     final author = _book!['author'] ?? '';
     final description = _book!['description'] ?? '';
-    final coverUrl = _book!['cover_url'];
+    final coverUrl = _book!['cover_url'] ?? _book!['image_url'];
     final price = (_book!['price'] as num?)?.toDouble() ?? 0;
 
     return Scaffold(
@@ -116,7 +119,6 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Couverture
             Center(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -132,8 +134,6 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Titre + Auteur
             Text(
               title,
               style: const TextStyle(
@@ -146,15 +146,10 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
               const SizedBox(height: 6),
               Text(
                 author,
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: Colors.black54,
-                ),
+                style: const TextStyle(fontSize: 15, color: Colors.black54),
               ),
             ],
             const SizedBox(height: 16),
-
-            // Prix
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -170,8 +165,6 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Description
             const Text(
               'Description',
               style: TextStyle(
@@ -193,8 +186,6 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
           ],
         ),
       ),
-
-      // Bouton en bas
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -209,7 +200,7 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onPressed: _isPurchased ? _goToReader : _goToPayment,
+              onPressed: _isPurchased ? _goToChapters : _goToPayment,
               child: Text(
                 _isPurchased ? 'Lire maintenant' : 'Payer pour lire',
                 style: const TextStyle(
