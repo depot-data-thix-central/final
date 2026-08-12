@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+
 import '../models/book_chapter.dart';
 import '../models/book_section.dart';
 import '../services/book_content_service.dart';
-import '../../theme/thix_policy.dart';
+
+// 👇 L'import qui manquait pour résoudre l'erreur
+import '../../../theme/thix_policy.dart'; 
 
 final bookChaptersProvider =
     FutureProvider.family<List<BookChapter>, String>((ref, bookId) async {
