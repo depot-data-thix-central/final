@@ -2,8 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart'; 
+
 import '../models/book.dart';
 
 class AuthorLibraryPage extends StatelessWidget {
@@ -20,10 +20,7 @@ class AuthorLibraryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    
-    // Logique basique de pluriel
-    final bookLabel = books.length > 1 ? l10n.books : l10n.book;
+    final bookLabel = books.length > 1 ? 'livres' : 'livre';
 
     return Scaffold(
       backgroundColor: ThixPolicy.surfaceSoft,
@@ -41,7 +38,7 @@ class AuthorLibraryPage extends StatelessWidget {
               ),
             ),
             Text(
-              '${l10n.shelf} $shelfCode · ${books.length} $bookLabel',
+              'Étagère $shelfCode · ${books.length} $bookLabel',
               style: ThixPolicy.captionStyle.copyWith(
                 color: ThixPolicy.onBrand.withOpacity(0.7),
               ),
@@ -52,7 +49,7 @@ class AuthorLibraryPage extends StatelessWidget {
       body: books.isEmpty
           ? Center(
               child: Text(
-                l10n.noBooksAvailable,
+                'Aucun livre disponible',
                 style: ThixPolicy.bodyStyle.copyWith(
                   color: ThixPolicy.textSecondary,
                 ),
@@ -129,7 +126,7 @@ class AuthorLibraryPage extends StatelessWidget {
                                   ),
                                   child: Text(
                                     isFree
-                                        ? l10n.free
+                                        ? 'Gratuit'
                                         : '${book.price.toStringAsFixed(0)} ${book.currency}',
                                     style: ThixPolicy.microStyle.copyWith(
                                       color: ThixPolicy.onBrand,
@@ -153,7 +150,7 @@ class AuthorLibraryPage extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      l10n.scheduledDeletion,
+                                      'Suppression programmée',
                                       textAlign: TextAlign.center,
                                       style: ThixPolicy.microStyle.copyWith(
                                         color: ThixPolicy.onBrand,
