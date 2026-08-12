@@ -19,7 +19,9 @@ import 'package:thix_id/presentation/education/pages/recommendations_page.dart';
 import 'package:thix_id/presentation/education/models/certificate.dart';
 // Lecteur de leçon
 import 'package:thix_id/presentation/education/widgets/formation_detail/formation_lesson_player.dart';
-import '../screens/author_library_page.dart';
+import 'screens/author_library_page.dart'; // Le bon chemin relatif
+import 'models/book.dart'; // Pour que le compilateur reconnaisse le type "Book"
+
 // Formateur
 import 'package:thix_id/presentation/education/instructor/dashboard/instructor_dashboard.dart';
 import 'package:thix_id/presentation/education/instructor/course_management_page.dart';
