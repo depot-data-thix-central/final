@@ -16,6 +16,7 @@ class _C {
   static const textMuted = Color(0xFF7386A8);
   static const border = Color(0xFFE2E8F0);
   static const red = Color(0xFFEF4444);
+  static const green = Color(0xFF16A34A);
 }
 
 // ============================================================
@@ -39,7 +40,7 @@ class InstructorBooksNotifier extends AsyncNotifier<List<Book>> {
       final res = await Supabase.instance.client
           .from('books')
           .select('*')
-          .eq('instructor_id', userId) 
+          .eq('instructor_id', userId)
           .order('created_at', ascending: false);
 
       return (res as List).map((json) => Book.fromJson(json)).toList();
@@ -82,7 +83,9 @@ class BookManagementPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: _C.bg,
       appBar: AppBar(
-        title: const Text('Mes livres', style: TextStyle(fontWeight: FontWeight.w800, color: _C.textMain, fontSize: 18)),
+        title: const Text('Mes livres',
+            style: TextStyle(
+                fontWeight: FontWeight.w800, color: _C.textMain, fontSize: 18)),
         backgroundColor: _C.surface,
         elevation: 0,
         centerTitle: true,
@@ -102,14 +105,17 @@ class BookManagementPage extends ConsumerWidget {
         ],
       ),
       body: booksAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: _C.primary)),
+        loading: () =>
+            const Center(child: CircularProgressIndicator(color: _C.primary)),
         error: (err, stack) => Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.error_outline_rounded, color: _C.red, size: 48),
               const SizedBox(height: 16),
-              const Text('Erreur de chargement', style: TextStyle(fontWeight: FontWeight.w700, color: _C.textMain)),
+              const Text('Erreur de chargement',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, color: _C.textMain)),
               TextButton(
                 onPressed: () => notifier.refresh(),
                 child: const Text('Réessayer'),
@@ -139,7 +145,8 @@ class BookManagementPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, InstructorBooksNotifier notifier) {
+  Widget _buildEmptyState(
+      BuildContext context, InstructorBooksNotifier notifier) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -150,12 +157,14 @@ class BookManagementPage extends ConsumerWidget {
               color: _C.primary.withOpacity(0.05),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.library_books_rounded, size: 64, color: _C.primary),
+            child: const Icon(Icons.library_books_rounded,
+                size: 64, color: _C.primary),
           ),
           const SizedBox(height: 24),
           const Text(
             'Aucun livre publié',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _C.textMain),
+            style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.w800, color: _C.textMain),
           ),
           const SizedBox(height: 8),
           const Padding(
@@ -173,11 +182,14 @@ class BookManagementPage extends ConsumerWidget {
               notifier.refresh();
             },
             icon: const Icon(Icons.add_rounded, color: Colors.white),
-            label: const Text('Créer un livre', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+            label: const Text('Créer un livre',
+                style:
+                    TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
             style: ElevatedButton.styleFrom(
               backgroundColor: _C.primary,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
               elevation: 0,
             ),
           )
@@ -186,7 +198,8 @@ class BookManagementPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildBookCard(BuildContext context, Book book, InstructorBooksNotifier notifier) {
+  Widget _buildBookCard(
+      BuildContext context, Book book, InstructorBooksNotifier notifier) {
     return Container(
       decoration: BoxDecoration(
         color: _C.surface,
@@ -212,60 +225,83 @@ class BookManagementPage extends ConsumerWidget {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
+                // Couverture
                 Container(
                   width: 60,
                   height: 90,
                   decoration: BoxDecoration(
                     color: _C.bg,
                     borderRadius: BorderRadius.circular(8),
-                    image: book.imageUrl != null 
-                        ? DecorationImage(image: NetworkImage(book.imageUrl!), fit: BoxFit.cover)
+                    image: book.imageUrl != null
+                        ? DecorationImage(
+                            image: NetworkImage(book.imageUrl!),
+                            fit: BoxFit.cover)
                         : null,
                   ),
-                  child: book.imageUrl == null 
+                  child: book.imageUrl == null
                       ? const Icon(Icons.book_rounded, color: _C.textMuted)
                       : null,
                 ),
                 const SizedBox(width: 16),
+
+                // Infos
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         book.title,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: _C.textMain),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: _C.textMain),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         book.author,
-                        style: const TextStyle(fontSize: 13, color: _C.textMuted),
+                        style: const TextStyle(
+                            fontSize: 13, color: _C.textMuted),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: _C.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          book.price == 0 ? 'Gratuit' : '${book.price} ${book.currency}',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _C.primary),
+                          book.price == 0
+                              ? 'Gratuit'
+                              : '${book.price} ${book.currency}',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: _C.primary),
                         ),
                       ),
                     ],
                   ),
                 ),
+
+                // Menu
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert_rounded, color: _C.textMuted),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  icon: const Icon(Icons.more_vert_rounded,
+                      color: _C.textMuted),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   onSelected: (value) async {
                     if (value == 'edit') {
                       await context.push('/instructor/books/edit/${book.id}');
                       notifier.refresh();
+                    } else if (value == 'content') {
+                      // ✅ NOUVEAU : aller vers la gestion du contenu (chapitres + sections)
+                      await context
+                          .push('/instructor/books/${book.id}/content');
                     } else if (value == 'delete') {
                       _showDeleteConfirmation(context, book, notifier);
                     }
@@ -273,11 +309,31 @@ class BookManagementPage extends ConsumerWidget {
                   itemBuilder: (context) => [
                     const PopupMenuItem(
                       value: 'edit',
-                      child: Row(children: [Icon(Icons.edit_rounded, size: 20), SizedBox(width: 12), Text('Modifier')]),
+                      child: Row(children: [
+                        Icon(Icons.edit_rounded, size: 20),
+                        SizedBox(width: 12),
+                        Text('Modifier')
+                      ]),
+                    ),
+                    const PopupMenuItem(
+                      value: 'content',
+                      child: Row(children: [
+                        Icon(Icons.menu_book_rounded,
+                            size: 20, color: _C.primary),
+                        SizedBox(width: 12),
+                        Text('Contenu',
+                            style: TextStyle(
+                                color: _C.primary,
+                                fontWeight: FontWeight.w600)),
+                      ]),
                     ),
                     const PopupMenuItem(
                       value: 'delete',
-                      child: Row(children: [Icon(Icons.delete_rounded, color: _C.red, size: 20), SizedBox(width: 12), Text('Supprimer', style: TextStyle(color: _C.red))]),
+                      child: Row(children: [
+                        Icon(Icons.delete_rounded, color: _C.red, size: 20),
+                        SizedBox(width: 12),
+                        Text('Supprimer', style: TextStyle(color: _C.red))
+                      ]),
                     ),
                   ],
                 ),
@@ -289,7 +345,8 @@ class BookManagementPage extends ConsumerWidget {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, Book book, InstructorBooksNotifier notifier) {
+  void _showDeleteConfirmation(
+      BuildContext context, Book book, InstructorBooksNotifier notifier) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -298,10 +355,12 @@ class BookManagementPage extends ConsumerWidget {
           children: [
             Icon(Icons.warning_amber_rounded, color: _C.red),
             SizedBox(width: 8),
-            Text('Supprimer ce livre ?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('Supprimer ce livre ?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: Text('Voulez-vous vraiment supprimer "${book.title}" ? Cette action est irréversible.'),
+        content: Text(
+            'Voulez-vous vraiment supprimer "${book.title}" ? Cette action est irréversible.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -311,18 +370,23 @@ class BookManagementPage extends ConsumerWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: _C.red,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () async {
               Navigator.pop(ctx);
               final success = await notifier.deleteBook(book.id);
               if (!success && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Erreur lors de la suppression'), backgroundColor: _C.red),
+                  const SnackBar(
+                      content: Text('Erreur lors de la suppression'),
+                      backgroundColor: _C.red),
                 );
               }
             },
-            child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('Supprimer',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
