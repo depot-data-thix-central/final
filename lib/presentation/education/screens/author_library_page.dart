@@ -3,9 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import '../models/book.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart'; 
-
+import '../models/book.dart';
 
 class AuthorLibraryPage extends StatelessWidget {
   final String author;
@@ -23,7 +22,7 @@ class AuthorLibraryPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     
-    // Logique basique de pluriel (si tu n'utilises pas la vraie syntaxe intl plural)
+    // Logique basique de pluriel
     final bookLabel = books.length > 1 ? l10n.books : l10n.book;
 
     return Scaffold(
@@ -159,7 +158,7 @@ class AuthorLibraryPage extends StatelessWidget {
                                       style: ThixPolicy.microStyle.copyWith(
                                         color: ThixPolicy.onBrand,
                                         fontWeight: ThixPolicy.bold,
-                                        fontSize: 9, // Forcé petit pour ce badge critique
+                                        fontSize: 9,
                                       ),
                                     ),
                                   ),
