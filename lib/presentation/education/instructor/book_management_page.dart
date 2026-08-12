@@ -17,12 +17,14 @@ class _C {
   static const border = Color(0xFFE2E8F0);
   static const red = Color(0xFFEF4444);
   static const green = Color(0xFF16A34A);
+  static const orange = Color(0xFFF59E0B);
 }
 
 // ============================================================
-// PROVIDER (Logique métier et accès Supabase)
+// PROVIDER
 // ============================================================
-final instructorBooksProvider = AsyncNotifierProvider<InstructorBooksNotifier, List<Book>>(
+final instructorBooksProvider =
+    AsyncNotifierProvider<InstructorBooksNotifier, List<Book>>(
   InstructorBooksNotifier.new,
 );
 
@@ -37,6 +39,7 @@ class InstructorBooksNotifier extends AsyncNotifier<List<Book>> {
     if (userId == null) return [];
 
     try {
+      // On récupère aussi les livres en attente de suppression
       final res = await Supabase.instance.client
           .from('books')
           .select('*')
@@ -55,22 +58,44 @@ class InstructorBooksNotifier extends AsyncNotifier<List<Book>> {
     state = await AsyncValue.guard(() => _fetchMyBooks());
   }
 
-  Future<bool> deleteBook(String bookId) async {
+  /// Soft-delete : programme la suppression dans 7 jours
+  Future<bool> softDeleteBook(String bookId) async {
     try {
-      await Supabase.instance.client.from('books').delete().eq('id', bookId);
-      if (state.value != null) {
-        state = AsyncData(state.value!.where((b) => b.id != bookId).toList());
-      }
+      final now = DateTime.now();
+      final scheduled = now.add(const Duration(days: 7));
+
+      await Supabase.instance.client.from('books').update({
+        'deleted_at': now.toIso8601String(),
+        'scheduled_deletion_at': scheduled.toIso8601String(),
+      }).eq('id', bookId);
+
+      await refresh();
       return true;
     } catch (e) {
-      debugPrint('❌ Erreur suppression du livre : $e');
+      debugPrint('❌ Erreur soft-delete : $e');
+      return false;
+    }
+  }
+
+  /// Annule la suppression programmée
+  Future<bool> cancelDeletion(String bookId) async {
+    try {
+      await Supabase.instance.client.from('books').update({
+        'deleted_at': null,
+        'scheduled_deletion_at': null,
+      }).eq('id', bookId);
+
+      await refresh();
+      return true;
+    } catch (e) {
+      debugPrint('❌ Erreur annulation : $e');
       return false;
     }
   }
 }
 
 // ============================================================
-// WIDGET UI (ConsumerWidget)
+// WIDGET UI
 // ============================================================
 class BookManagementPage extends ConsumerWidget {
   const BookManagementPage({super.key});
@@ -83,9 +108,11 @@ class BookManagementPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: _C.bg,
       appBar: AppBar(
-        title: const Text('Mes livres',
-            style: TextStyle(
-                fontWeight: FontWeight.w800, color: _C.textMain, fontSize: 18)),
+        title: const Text(
+          'Mes livres',
+          style: TextStyle(
+              fontWeight: FontWeight.w800, color: _C.textMain, fontSize: 18),
+        ),
         backgroundColor: _C.surface,
         elevation: 0,
         centerTitle: true,
@@ -95,7 +122,8 @@ class BookManagementPage extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded, color: _C.primary),
+            icon: const Icon(Icons.add_circle_outline_rounded,
+                color: _C.primary),
             onPressed: () async {
               await context.push('/instructor/books/create');
               notifier.refresh();
@@ -113,9 +141,11 @@ class BookManagementPage extends ConsumerWidget {
             children: [
               const Icon(Icons.error_outline_rounded, color: _C.red, size: 48),
               const SizedBox(height: 16),
-              const Text('Erreur de chargement',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700, color: _C.textMain)),
+              const Text(
+                'Erreur de chargement',
+                style:
+                    TextStyle(fontWeight: FontWeight.w700, color: _C.textMain),
+              ),
               TextButton(
                 onPressed: () => notifier.refresh(),
                 child: const Text('Réessayer'),
@@ -182,12 +212,14 @@ class BookManagementPage extends ConsumerWidget {
               notifier.refresh();
             },
             icon: const Icon(Icons.add_rounded, color: Colors.white),
-            label: const Text('Créer un livre',
-                style:
-                    TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+            label: const Text(
+              'Créer un livre',
+              style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: _C.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
               elevation: 0,
@@ -200,11 +232,23 @@ class BookManagementPage extends ConsumerWidget {
 
   Widget _buildBookCard(
       BuildContext context, Book book, InstructorBooksNotifier notifier) {
+    final isScheduledForDeletion = book.scheduledDeletionAt != null;
+    final remaining = isScheduledForDeletion
+        ? book.scheduledDeletionAt!.difference(DateTime.now())
+        : null;
+    final daysLeft =
+        remaining != null && !remaining.isNegative ? remaining.inDays : 0;
+    final hoursLeft =
+        remaining != null && !remaining.isNegative ? remaining.inHours % 24 : 0;
+
     return Container(
       decoration: BoxDecoration(
         color: _C.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _C.border),
+        border: Border.all(
+          color: isScheduledForDeletion ? _C.orange.withOpacity(0.5) : _C.border,
+          width: isScheduledForDeletion ? 1.5 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -217,30 +261,35 @@ class BookManagementPage extends ConsumerWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () async {
-            await context.push('/instructor/books/edit/${book.id}');
-            notifier.refresh();
-          },
+          onTap: isScheduledForDeletion
+              ? null
+              : () async {
+                  await context.push('/instructor/books/edit/${book.id}');
+                  notifier.refresh();
+                },
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
                 // Couverture
-                Container(
-                  width: 60,
-                  height: 90,
-                  decoration: BoxDecoration(
-                    color: _C.bg,
-                    borderRadius: BorderRadius.circular(8),
-                    image: book.imageUrl != null
-                        ? DecorationImage(
-                            image: NetworkImage(book.imageUrl!),
-                            fit: BoxFit.cover)
+                Opacity(
+                  opacity: isScheduledForDeletion ? 0.5 : 1,
+                  child: Container(
+                    width: 60,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      color: _C.bg,
+                      borderRadius: BorderRadius.circular(8),
+                      image: book.imageUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(book.imageUrl!),
+                              fit: BoxFit.cover)
+                          : null,
+                    ),
+                    child: book.imageUrl == null
+                        ? const Icon(Icons.book_rounded, color: _C.textMuted)
                         : null,
                   ),
-                  child: book.imageUrl == null
-                      ? const Icon(Icons.book_rounded, color: _C.textMuted)
-                      : null,
                 ),
                 const SizedBox(width: 16),
 
@@ -251,10 +300,13 @@ class BookManagementPage extends ConsumerWidget {
                     children: [
                       Text(
                         book.title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            color: _C.textMain),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: isScheduledForDeletion
+                              ? _C.textMuted
+                              : _C.textMain,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -267,23 +319,44 @@ class BookManagementPage extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _C.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          book.price == 0
-                              ? 'Gratuit'
-                              : '${book.price} ${book.currency}',
-                          style: const TextStyle(
+
+                      // Prix ou badge suppression
+                      if (isScheduledForDeletion)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _C.orange.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Suppression dans ${daysLeft}j ${hoursLeft}h',
+                            style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: _C.primary),
+                              color: _C.orange,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _C.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            book.price == 0
+                                ? 'Gratuit'
+                                : '${book.price} ${book.currency}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: _C.primary,
+                            ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -299,43 +372,72 @@ class BookManagementPage extends ConsumerWidget {
                       await context.push('/instructor/books/edit/${book.id}');
                       notifier.refresh();
                     } else if (value == 'content') {
-                      // ✅ NOUVEAU : aller vers la gestion du contenu (chapitres + sections)
                       await context
                           .push('/instructor/books/${book.id}/content');
                     } else if (value == 'delete') {
                       _showDeleteConfirmation(context, book, notifier);
+                    } else if (value == 'cancel_deletion') {
+                      final ok = await notifier.cancelDeletion(book.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(ok
+                                ? 'Suppression annulée'
+                                : 'Erreur lors de l\'annulation'),
+                            backgroundColor: ok ? _C.green : _C.red,
+                          ),
+                        );
+                      }
                     }
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(children: [
-                        Icon(Icons.edit_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('Modifier')
-                      ]),
-                    ),
-                    const PopupMenuItem(
-                      value: 'content',
-                      child: Row(children: [
-                        Icon(Icons.menu_book_rounded,
-                            size: 20, color: _C.primary),
-                        SizedBox(width: 12),
-                        Text('Contenu',
-                            style: TextStyle(
-                                color: _C.primary,
-                                fontWeight: FontWeight.w600)),
-                      ]),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(children: [
-                        Icon(Icons.delete_rounded, color: _C.red, size: 20),
-                        SizedBox(width: 12),
-                        Text('Supprimer', style: TextStyle(color: _C.red))
-                      ]),
-                    ),
-                  ],
+                  itemBuilder: (context) {
+                    if (isScheduledForDeletion) {
+                      return [
+                        const PopupMenuItem(
+                          value: 'cancel_deletion',
+                          child: Row(children: [
+                            Icon(Icons.undo_rounded,
+                                size: 20, color: _C.green),
+                            SizedBox(width: 12),
+                            Text('Annuler la suppression',
+                                style: TextStyle(
+                                    color: _C.green,
+                                    fontWeight: FontWeight.w600)),
+                          ]),
+                        ),
+                      ];
+                    }
+                    return [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(children: [
+                          Icon(Icons.edit_rounded, size: 20),
+                          SizedBox(width: 12),
+                          Text('Modifier')
+                        ]),
+                      ),
+                      const PopupMenuItem(
+                        value: 'content',
+                        child: Row(children: [
+                          Icon(Icons.menu_book_rounded,
+                              size: 20, color: _C.primary),
+                          SizedBox(width: 12),
+                          Text('Contenu',
+                              style: TextStyle(
+                                  color: _C.primary,
+                                  fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(children: [
+                          Icon(Icons.delete_rounded, color: _C.red, size: 20),
+                          SizedBox(width: 12),
+                          Text('Supprimer', style: TextStyle(color: _C.red))
+                        ]),
+                      ),
+                    ];
+                  },
                 ),
               ],
             ),
@@ -353,40 +455,53 @@ class BookManagementPage extends ConsumerWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: _C.red),
+            Icon(Icons.warning_amber_rounded, color: _C.orange),
             SizedBox(width: 8),
-            Text('Supprimer ce livre ?',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                'Programmer la suppression ?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
           ],
         ),
         content: Text(
-            'Voulez-vous vraiment supprimer "${book.title}" ? Cette action est irréversible.'),
+          '« ${book.title} » ne sera plus accessible dans 7 jours.\n\n'
+          'Les lecteurs qui l’ont déjà acheté verront un compte à rebours.\n'
+          'Tu pourras annuler la suppression pendant ces 7 jours.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler', style: TextStyle(color: _C.textMuted)),
+            child:
+                const Text('Annuler', style: TextStyle(color: _C.textMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _C.red,
+              backgroundColor: _C.orange,
               elevation: 0,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              final success = await notifier.deleteBook(book.id);
-              if (!success && context.mounted) {
+              final success = await notifier.softDeleteBook(book.id);
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Erreur lors de la suppression'),
-                      backgroundColor: _C.red),
+                  SnackBar(
+                    content: Text(success
+                        ? 'Suppression programmée dans 7 jours'
+                        : 'Erreur lors de la programmation'),
+                    backgroundColor: success ? _C.orange : _C.red,
+                  ),
                 );
               }
             },
-            child: const Text('Supprimer',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Programmer (7 jours)',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
