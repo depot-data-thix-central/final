@@ -17,7 +17,7 @@ import 'package:thix_id/presentation/education/pages/recommendations_page.dart';
 import 'package:thix_id/presentation/education/models/certificate.dart';
 // Lecteur de leçon
 import 'package:thix_id/presentation/education/widgets/formation_detail/formation_lesson_player.dart';
-
+import 'package:thix_id/presentation/education/screens/book_section_detail_page.dart';
 // Formateur – routes fonctionnelles
 import 'package:thix_id/presentation/education/instructor/dashboard/instructor_dashboard.dart';
 import 'package:thix_id/presentation/education/instructor/course_management_page.dart';
@@ -91,7 +91,16 @@ List<GoRoute> educationRoutes = [
     ],
   ),
 ];
-
+GoRoute(
+  path: 'section/:sectionId',
+  name: 'educationBookSection',
+  pageBuilder: (_, state) {
+    final sectionId = state.pathParameters['sectionId']!;
+    return NoTransitionPage(
+      child: BookSectionDetailPage(sectionId: sectionId),
+    );
+  },
+),
 List<GoRoute> instructorRoutes = [
   GoRoute(path: '/instructor/dashboard', name: 'instructorDashboard', pageBuilder: (_, __) => const NoTransitionPage(child: InstructorDashboard())),
   
