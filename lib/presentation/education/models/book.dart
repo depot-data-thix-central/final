@@ -15,7 +15,8 @@ class Book {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final DateTime? scheduledDeletionAt;
-
+final String? shelfCode;
+final String? category;
   Book({
     required this.id,
     required this.title,
@@ -56,6 +57,8 @@ class Book {
         scheduledDeletionAt: json['scheduled_deletion_at'] != null
             ? DateTime.parse(json['scheduled_deletion_at'] as String)
             : null,
+    shelfCode: json['shelf_code'] as String?,
+category: json['category'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
