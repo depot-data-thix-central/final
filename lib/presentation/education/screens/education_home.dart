@@ -962,7 +962,7 @@ class _AuthorShelf extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-  'Étagère $shelfCode · \( {books.length} livre \){books.length > 1 ? 's' : ''}',
+  'Étagère $shelfCode · ${books.length} livre${books.length > 1 ? 's' : ''}',
   style: const TextStyle(
     fontSize: 11,
     color: Colors.grey,
@@ -1048,12 +1048,12 @@ class _BookSpineCard extends StatelessWidget {
     final isDeleting = book.scheduledDeletionAt != null &&
         book.scheduledDeletionAt!.isAfter(DateTime.now());
 
-    String countdown = '';
+        String countdown = '';
     if (isDeleting) {
       final r = book.scheduledDeletionAt!.difference(DateTime.now());
       final d = r.inDays;
       final h = r.inHours % 24;
-      countdown = d > 0 ? '${d}j \( {h}h' : ' \){h}h';
+      countdown = d > 0 ? '${d}j ${h}h' : '${h}h';
     }
 
     return GestureDetector(
