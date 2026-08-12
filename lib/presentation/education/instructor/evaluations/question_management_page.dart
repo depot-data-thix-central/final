@@ -197,42 +197,36 @@ class _QuestionManagementPageState extends ConsumerState<QuestionManagementPage>
   Future<void> _saveQuestions() async {
     setState(() => _isSaving = true);
     try {
-      if (_questions.isEmpty) {
-        // S'il n'y a plus aucune question, on vide la table pour cette évaluation
-        await Supabase.instance.client.from('questions').delete().eq('evaluation_id', widget.evaluationId);
-      } else {
-        // Préparation du payload avec les IDs existants pour faire un "Upsert" (Mise à jour ou Insertion)
+      // 1. Supprimer les anciennes questions de cette évaluation
+      await Supabase.instance.client
+          .from('questions')
+          .delete()
+          .eq('evaluation_id', widget.evaluationId);
+
+      // 2. Réinsérer avec les BONNES colonnes
+      if (_questions.isNotEmpty) {
         final payload = _questions.map((q) {
-          final map = {
+          return {
             'evaluation_id': widget.evaluationId,
-            'text': q['question'],
-            'type': q['type'],
-            'options': q['options'],
-            'correct_index': q['correctIndex'],
-            'correct_answer': q['type'] == 'qcm' && q['options'] != null && (q['options'] as List).isNotEmpty
-                ? q['options'][q['correctIndex']]
-                : q['type'] == 'vrai_faux' ? (q['correctIndex'] == 0 ? 'Vrai' : 'Faux') : null,
+            'question': q['question'],              // ✅ colonne réelle
+            'options': q['options'] ?? [],          // jsonb
+            'correct_index': q['correctIndex'] ?? 0,
           };
-          if (q['id'] != null) map['id'] = q['id']; // Clé primaire pour forcer l'update
-          return map;
         }).toList();
 
-        // 1. Upsert : Insère les nouvelles et met à jour les anciennes (Préserve les foreign keys)
-        final response = await Supabase.instance.client
-            .from('questions')
-            .upsert(payload)
-            .select('id');
-
-        // 2. Nettoyage : On supprime les questions qui étaient en base mais que le formateur a retirées
-        final validIds = (response as List).map((row) => row['id']).toList();
-        if (validIds.isNotEmpty) {
-          await Supabase.instance.client
-              .from('questions')
-              .delete()
-              .eq('evaluation_id', widget.evaluationId)
-              .not('id', 'in', validIds);
-        }
+        await Supabase.instance.client.from('questions').insert(payload);
       }
+
+      if (!mounted) return;
+      _showSnackBar('Questions sauvegardées avec succès !', isError: false);
+      context.pop(_questions);
+    } catch (e) {
+      _showSnackBar('Erreur lors de la sauvegarde : $e', isError: true);
+      debugPrint('❌ Quiz save error: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
       if (!mounted) return;
       _showSnackBar('Questions sauvegardées avec succès !', isError: false);
