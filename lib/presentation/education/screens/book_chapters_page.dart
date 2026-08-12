@@ -3,15 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-// 👇 Les deux imports obligatoires pour la langue et le design
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart'; 
 
 import '../models/book_chapter.dart';
 import '../models/book_section.dart';
 import '../services/book_content_service.dart';
-
 
 final bookChaptersProvider =
     FutureProvider.family<List<BookChapter>, String>((ref, bookId) async {
@@ -36,7 +32,6 @@ class BookChaptersPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chaptersAsync = ref.watch(bookChaptersProvider(bookId));
-    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: ThixPolicy.surfaceSoft,
@@ -45,7 +40,7 @@ class BookChaptersPage extends ConsumerWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: ThixPolicy.onBrand),
         title: Text(
-          bookTitle ?? l10n.chapters,
+          bookTitle ?? 'Chapitres',
           style: ThixPolicy.titleStyle.copyWith(
             color: ThixPolicy.onBrand,
           ),
@@ -55,12 +50,12 @@ class BookChaptersPage extends ConsumerWidget {
       ),
       body: chaptersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('${l10n.error} : $e')),
+        error: (e, _) => Center(child: Text('Erreur : $e')),
         data: (chapters) {
           if (chapters.isEmpty) {
             return Center(
               child: Text(
-                l10n.noChaptersAvailable,
+                'Aucun chapitre disponible pour ce livre.',
                 style: ThixPolicy.bodyStyle.copyWith(
                   color: ThixPolicy.textSecondary,
                 ),
@@ -100,7 +95,6 @@ class _ChapterCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sectionsAsync =
         ref.watch(bookSectionsByChapterProvider(chapter.id));
-    final l10n = AppLocalizations.of(context)!;
 
     return Container(
       margin: const EdgeInsets.only(bottom: ThixPolicy.s14),
@@ -145,7 +139,7 @@ class _ChapterCard extends ConsumerWidget {
             style: ThixPolicy.titleStyle,
           ),
           subtitle: Text(
-            '${l10n.chapter} ${chapter.chapterNumber}',
+            'Chapitre ${chapter.chapterNumber}',
             style: ThixPolicy.captionStyle,
           ),
           children: [
@@ -154,13 +148,13 @@ class _ChapterCard extends ConsumerWidget {
                 padding: EdgeInsets.all(ThixPolicy.s12),
                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               ),
-              error: (e, _) => Text('${l10n.error} : $e'),
+              error: (e, _) => Text('Erreur : $e'),
               data: (sections) {
                 if (sections.isEmpty) {
                   return Padding(
                     padding: const EdgeInsets.all(ThixPolicy.s12),
                     child: Text(
-                      l10n.noSectionsAvailable,
+                      'Aucune section dans ce chapitre.',
                       style: ThixPolicy.bodySmallStyle,
                     ),
                   );
@@ -180,7 +174,7 @@ class _ChapterCard extends ConsumerWidget {
                       ),
                       title: Text(
                         section.title ??
-                            '${l10n.section} ${section.sectionNumber ?? ''}',
+                            'Section ${section.sectionNumber ?? ''}',
                         style: ThixPolicy.bodyMediumStyle.copyWith(
                           fontWeight: ThixPolicy.semiBold,
                         ),
