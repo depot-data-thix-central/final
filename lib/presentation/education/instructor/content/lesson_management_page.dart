@@ -202,16 +202,16 @@ class _LessonManagementPageState
         evaluationId = existingEval['id'] as String;
       } else {
         final newEval = await Supabase.instance.client
-            .from('evaluations')
-            .insert({
-              'lesson_id': _savedLessonId!,
-              'title': _titleController.text.trim().isNotEmpty
-                  ? _titleController.text.trim()
-                  : 'Évaluation',
-              'type': _type,
-            })
-            .select('id')
-            .single();
+    .from('evaluations')
+    .insert({
+      'lesson_id': _savedLessonId!,
+      'title': _titleController.text.trim().isNotEmpty
+          ? _titleController.text.trim()
+          : 'Évaluation',
+      'passing_score': 50,
+    })
+    .select('id')
+    .single();
         evaluationId = newEval['id'] as String;
       }
 
