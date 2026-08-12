@@ -85,6 +85,72 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
     });
   }
 
+  Widget _buildDeletionAlert(Map<String, dynamic> book) {
+    final scheduled = book['scheduled_deletion_at'];
+    if (scheduled == null) return const SizedBox.shrink();
+
+    final deletionDate = DateTime.tryParse(scheduled.toString());
+    if (deletionDate == null) return const SizedBox.shrink();
+
+    final remaining = deletionDate.difference(DateTime.now());
+    if (remaining.isNegative) return const SizedBox.shrink();
+
+    final days = remaining.inDays;
+    final hours = remaining.inHours % 24;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEE2E2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDC2626), width: 1.2),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded,
+              color: Color(0xFFDC2626), size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Alerte',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: Color(0xFF991B1B),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Ce livre ne sera plus accessible dans : ${days}j ${hours}h',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF991B1B),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _placeholderCover() {
+    return Container(
+      height: 220,
+      width: 160,
+      color: Colors.grey.shade300,
+      child: const Icon(Icons.menu_book, size: 60, color: Colors.grey),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -105,6 +171,9 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
     final description = _book!['description'] ?? '';
     final coverUrl = _book!['cover_url'] ?? _book!['image_url'];
     final price = (_book!['price'] as num?)?.toDouble() ?? 0;
+    final shelfCode = _book!['shelf_code']?.toString();
+    final category = _book!['category']?.toString();
+    final currency = _book!['currency']?.toString() ?? 'FC';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -119,12 +188,16 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ Alerte suppression 7 jours
+            _buildDeletionAlert(_book!),
+
+            // Couverture
             Center(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: coverUrl != null && coverUrl.toString().isNotEmpty
                     ? Image.network(
-                        coverUrl,
+                        coverUrl.toString(),
                         height: 220,
                         width: 160,
                         fit: BoxFit.cover,
@@ -134,22 +207,53 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
               ),
             ),
             const SizedBox(height: 24),
+
+            // Titre
             Text(
-              title,
+              title.toString(),
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
                 color: Color(0xFF0A1F44),
               ),
             ),
-            if (author.isNotEmpty) ...[
+
+            // Auteur
+            if (author.toString().isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
-                author,
+                author.toString(),
                 style: const TextStyle(fontSize: 15, color: Colors.black54),
               ),
             ],
+
+            // Étagère + catégorie
+            if (shelfCode != null && shelfCode.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Étagère $shelfCode',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            if (category != null && category.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                category,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF2D6CDF),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+
             const SizedBox(height: 16),
+
+            // Prix
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -157,14 +261,20 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                _isFree ? 'Gratuit' : '${price.toStringAsFixed(0)} FC',
+                _isFree
+                    ? 'Gratuit'
+                    : '${price.toStringAsFixed(0)} $currency',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: _isFree ? Colors.green.shade700 : Colors.blue.shade800,
+                  color:
+                      _isFree ? Colors.green.shade700 : Colors.blue.shade800,
                 ),
               ),
             ),
+
             const SizedBox(height: 24),
+
+            // Description
             const Text(
               'Description',
               style: TextStyle(
@@ -175,7 +285,9 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              description.isNotEmpty ? description : 'Aucune description.',
+              description.toString().isNotEmpty
+                  ? description.toString()
+                  : 'Aucune description.',
               style: const TextStyle(
                 fontSize: 14,
                 height: 1.5,
@@ -212,70 +324,6 @@ class _BookDetailsPageState extends ConsumerState<BookDetailsPage> {
           ),
         ),
       ),
-    );
-  }
-Widget _buildDeletionAlert(Map<String, dynamic> book) {
-  final scheduled = book['scheduled_deletion_at'];
-  if (scheduled == null) return const SizedBox.shrink();
-
-  final deletionDate = DateTime.parse(scheduled);
-  final remaining = deletionDate.difference(DateTime.now());
-
-  if (remaining.isNegative) return const SizedBox.shrink();
-
-  final days = remaining.inDays;
-  final hours = remaining.inHours % 24;
-
-  return Container(
-    width: double.infinity,
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: const Color(0xFFFEF3C7),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFF59E0B)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.warning_amber_rounded,
-            color: Color(0xFFD97706), size: 22),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Alerte',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: Color(0xFF92400E),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Ce livre ne sera plus accessible dans : '
-                '${days}j ${hours}h',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF92400E),
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-  Widget _placeholderCover() {
-    return Container(
-      height: 220,
-      width: 160,
-      color: Colors.grey.shade300,
-      child: const Icon(Icons.menu_book, size: 60, color: Colors.grey),
     );
   }
 }
