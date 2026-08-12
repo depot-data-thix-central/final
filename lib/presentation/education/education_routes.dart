@@ -19,7 +19,7 @@ import 'package:thix_id/presentation/education/pages/recommendations_page.dart';
 import 'package:thix_id/presentation/education/models/certificate.dart';
 // Lecteur de leçon
 import 'package:thix_id/presentation/education/widgets/formation_detail/formation_lesson_player.dart';
-
+import '../screens/author_library_page.dart';
 // Formateur
 import 'package:thix_id/presentation/education/instructor/dashboard/instructor_dashboard.dart';
 import 'package:thix_id/presentation/education/instructor/course_management_page.dart';
@@ -63,6 +63,20 @@ List<GoRoute> educationRoutes = [
             const NoTransitionPage(child: EducationCertificates()),
       ),
 
+      GoRoute(
+  path: '/education/library/author',
+  name: 'libraryAuthor',
+  pageBuilder: (context, state) {
+    final extra = state.extra as Map<String, dynamic>? ?? {};
+    return NoTransitionPage(
+      child: AuthorLibraryPage(
+        author: extra['author'] as String? ?? '',
+        shelfCode: extra['shelfCode'] as String? ?? '',
+        books: (extra['books'] as List<Book>?) ?? [],
+      ),
+    );
+  },
+),
       // Détail de la formation
       GoRoute(
         path: 'formation/:formationId',
