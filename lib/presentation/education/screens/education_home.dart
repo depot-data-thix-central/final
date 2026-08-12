@@ -962,13 +962,13 @@ class _AuthorShelf extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Étagère $shelfCode · \( {books.length} livre \){books.length > 1 ? 's' : ''}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+  'Étagère $shelfCode · \( {books.length} livre \){books.length > 1 ? 's' : ''}',
+  style: const TextStyle(
+    fontSize: 11,
+    color: Colors.grey,
+    fontWeight: FontWeight.w600,
+  ),
+),
                   ],
                 ),
               ),
