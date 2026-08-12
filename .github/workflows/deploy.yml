@@ -41,10 +41,7 @@ jobs:
           fi
 
       - name: Build Web (CanvasKit)
-        run: |
-          flutter build web --release \
-            --base-href /final/
-            --no-wasm-dry-run
+        run: flutter build web --release --base-href /final/ --no-wasm-dry-run
 
       - name: Deploy to GitHub Pages (Branch gh-pages)
         uses: peaceiris/actions-gh-pages@v3
