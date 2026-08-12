@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../models/book.dart';
-import '../../theme/thix_policy.dart'; // Ajuste le chemin selon ton arborescence
+import 'package:thix_id/core/theme/thix_design_policy.dart'; 
+
 
 class AuthorLibraryPage extends StatelessWidget {
   final String author;
