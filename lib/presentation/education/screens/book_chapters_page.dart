@@ -3,14 +3,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+// 👇 Les deux imports obligatoires pour la langue et le design
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:thix_id/core/theme/thix_design_policy.dart'; 
 
 import '../models/book_chapter.dart';
 import '../models/book_section.dart';
 import '../services/book_content_service.dart';
 
-// 👇 L'import corrigé avec le chemin exact
-import 'package:thix_id/core/theme/thix_design_policy.dart'; 
 
 final bookChaptersProvider =
     FutureProvider.family<List<BookChapter>, String>((ref, bookId) async {
