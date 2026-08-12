@@ -2,12 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/book_chapter.dart';
 import '../models/book_section.dart';
 import '../services/book_content_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 
 class AddBookContentPage extends ConsumerStatefulWidget {
   final String bookId;
@@ -31,8 +29,10 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
   final _contentEnCtrl = TextEditingController();
 
   List<BookChapter> _chapters = [];
+  List<BookSection> _sectionsOfEditingChapter = [];
   String? _selectedChapterId;
-  String? _editingChapterId; // null = création, sinon = édition
+  String? _editingChapterId;
+  String? _editingSectionId;
   bool _loading = true;
   bool _saving = false;
   int _tabIndex = 0;
@@ -58,13 +58,27 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
     }
   }
 
-  void _startEditChapter(BookChapter chapter) {
+  Future<void> _loadSectionsForChapter(String chapterId) async {
+    try {
+      final sections = await _service.getSectionsByChapter(chapterId);
+      if (mounted) {
+        setState(() => _sectionsOfEditingChapter = sections);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _sectionsOfEditingChapter = []);
+    }
+  }
+
+  // ─── CHAPITRE ───────────────────────────────────────────
+  void _startEditChapter(BookChapter chapter) async {
     setState(() {
       _editingChapterId = chapter.id;
       _chapterNumberCtrl.text = chapter.chapterNumber.toString();
       _chapterTitleCtrl.text = chapter.title;
       _tabIndex = 0;
+      _editingSectionId = null;
     });
+    await _loadSectionsForChapter(chapter.id);
   }
 
   void _cancelEditChapter() {
@@ -72,6 +86,7 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
       _editingChapterId = null;
       _chapterNumberCtrl.clear();
       _chapterTitleCtrl.clear();
+      _sectionsOfEditingChapter = [];
     });
   }
 
@@ -80,23 +95,18 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
     setState(() => _saving = true);
     try {
       if (_editingChapterId != null) {
-        // UPDATE
-        await SupabaseUpdateChapter(
-          id: _editingChapterId!,
-          title: _chapterTitleCtrl.text.trim(),
-          chapterNumber:
-              int.tryParse(_chapterNumberCtrl.text) ?? 1,
-        );
+        await Supabase.instance.client.from('book_chapters').update({
+          'title': _chapterTitleCtrl.text.trim(),
+          'chapter_number': int.tryParse(_chapterNumberCtrl.text) ?? 1,
+        }).eq('id', _editingChapterId!);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Chapitre modifié !'),
-              backgroundColor: Colors.green,
-            ),
+                content: Text('Chapitre modifié !'),
+                backgroundColor: Colors.green),
           );
         }
       } else {
-        // CREATE
         final chapter = BookChapter(
           id: '',
           bookId: widget.bookId,
@@ -109,9 +119,8 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Chapitre ajouté !'),
-              backgroundColor: Colors.green,
-            ),
+                content: Text('Chapitre ajouté !'),
+                backgroundColor: Colors.green),
           );
         }
       }
@@ -134,17 +143,16 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('Supprimer ce chapitre ?'),
         content: Text(
-          '« ${chapter.title} » et toutes ses sections seront supprimés.',
-        ),
+            '« ${chapter.title} » et toutes ses sections seront supprimés.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+            child: const Text('Supprimer',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -152,20 +160,18 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
     if (confirm != true) return;
 
     try {
-      await SupabaseDeleteChapter(chapter.id);
-      if (_selectedChapterId == chapter.id) {
-        _selectedChapterId = null;
-      }
-      if (_editingChapterId == chapter.id) {
-        _cancelEditChapter();
-      }
+      await Supabase.instance.client
+          .from('book_chapters')
+          .delete()
+          .eq('id', chapter.id);
+      if (_selectedChapterId == chapter.id) _selectedChapterId = null;
+      if (_editingChapterId == chapter.id) _cancelEditChapter();
       await _loadChapters();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Chapitre supprimé'),
-            backgroundColor: Colors.green,
-          ),
+              content: Text('Chapitre supprimé'),
+              backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -177,52 +183,102 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
     }
   }
 
+  // ─── SECTION ────────────────────────────────────────────
+  void _startEditSection(BookSection s) {
+    setState(() {
+      _editingSectionId = s.id;
+      _tabIndex = 1;
+      _selectedChapterId = s.chapterId;
+      _sectionNumberCtrl.text = s.sectionNumber ?? '';
+      _sectionTitleCtrl.text = s.title ?? '';
+      _contentFrCtrl.text = s.contentFr ?? '';
+      _contentLnCtrl.text = s.contentLn ?? '';
+      _contentSwCtrl.text = s.contentSw ?? '';
+      _contentEnCtrl.text = s.contentEn ?? '';
+    });
+  }
+
+  void _cancelEditSection() {
+    setState(() {
+      _editingSectionId = null;
+      _sectionNumberCtrl.clear();
+      _sectionTitleCtrl.clear();
+      _contentFrCtrl.clear();
+      _contentLnCtrl.clear();
+      _contentSwCtrl.clear();
+      _contentEnCtrl.clear();
+    });
+  }
+
   Future<void> _saveSection() async {
     if (_selectedChapterId == null || _contentFrCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Choisis un chapitre et remplis le contenu FR'),
-        ),
+            content: Text('Choisis un chapitre et remplis le contenu FR')),
       );
       return;
     }
     setState(() => _saving = true);
     try {
-      final section = BookSection(
-        id: '',
-        chapterId: _selectedChapterId!,
-        bookId: widget.bookId,
-        title: _sectionTitleCtrl.text.trim().isEmpty
+      final data = {
+        'title': _sectionTitleCtrl.text.trim().isEmpty
             ? null
             : _sectionTitleCtrl.text.trim(),
-        sectionNumber: _sectionNumberCtrl.text.trim().isEmpty
+        'section_number': _sectionNumberCtrl.text.trim().isEmpty
             ? null
             : _sectionNumberCtrl.text.trim(),
-        contentFr: _contentFrCtrl.text.trim(),
-        contentLn: _contentLnCtrl.text.trim().isEmpty
+        'content_fr': _contentFrCtrl.text.trim(),
+        'content_ln': _contentLnCtrl.text.trim().isEmpty
             ? null
             : _contentLnCtrl.text.trim(),
-        contentSw: _contentSwCtrl.text.trim().isEmpty
+        'content_sw': _contentSwCtrl.text.trim().isEmpty
             ? null
             : _contentSwCtrl.text.trim(),
-        contentEn: _contentEnCtrl.text.trim().isEmpty
+        'content_en': _contentEnCtrl.text.trim().isEmpty
             ? null
             : _contentEnCtrl.text.trim(),
-      );
-      await _service.createSection(section);
-      _sectionTitleCtrl.clear();
-      _sectionNumberCtrl.clear();
-      _contentFrCtrl.clear();
-      _contentLnCtrl.clear();
-      _contentSwCtrl.clear();
-      _contentEnCtrl.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Section ajoutée !'),
-            backgroundColor: Colors.green,
-          ),
+      };
+
+      if (_editingSectionId != null) {
+        await Supabase.instance.client
+            .from('book_sections')
+            .update(data)
+            .eq('id', _editingSectionId!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Section modifiée !'),
+                backgroundColor: Colors.green),
+          );
+        }
+      } else {
+        final section = BookSection(
+          id: '',
+          chapterId: _selectedChapterId!,
+          bookId: widget.bookId,
+          title: data['title'] as String?,
+          sectionNumber: data['section_number'] as String?,
+          contentFr: data['content_fr'] as String,
+          contentLn: data['content_ln'] as String?,
+          contentSw: data['content_sw'] as String?,
+          contentEn: data['content_en'] as String?,
         );
+        await _service.createSection(section);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Section ajoutée !'),
+                backgroundColor: Colors.green),
+          );
+        }
+      }
+
+      final editedChapterId = _editingChapterId;
+      _cancelEditSection();
+
+      // Rafraîchir la liste des sections si on était en édition de chapitre
+      if (editedChapterId != null) {
+        await _loadSectionsForChapter(editedChapterId);
       }
     } catch (e) {
       if (mounted) {
@@ -232,6 +288,52 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _deleteSection(BookSection s) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer cette section ?'),
+        content: Text('« ${s.title ?? s.sectionNumber ?? 'Section'} »'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await Supabase.instance.client
+          .from('book_sections')
+          .delete()
+          .eq('id', s.id);
+      if (_editingChapterId != null) {
+        await _loadSectionsForChapter(_editingChapterId!);
+      }
+      if (_editingSectionId == s.id) _cancelEditSection();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Section supprimée'),
+              backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -375,6 +477,64 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
             ),
           ],
         ),
+
+        // Sections du chapitre en édition
+        if (isEditing) ...[
+          const SizedBox(height: 28),
+          const Text(
+            'Sections de ce chapitre',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+          const SizedBox(height: 8),
+          if (_sectionsOfEditingChapter.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Aucune section. Ajoute-en dans l’onglet Section.',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+            )
+          else
+            ..._sectionsOfEditingChapter.map((s) {
+              final preview = (s.contentFr ?? '');
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text(
+                    '${s.sectionNumber ?? ''} ${s.title ?? 'Sans titre'}'
+                        .trim(),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    preview.length > 80
+                        ? '${preview.substring(0, 80)}...'
+                        : preview,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_rounded,
+                            size: 20, color: Color(0xFF2D6CDF)),
+                        onPressed: () => _startEditSection(s),
+                        tooltip: 'Modifier le contenu',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_rounded,
+                            size: 20, color: Colors.red),
+                        onPressed: () => _deleteSection(s),
+                        tooltip: 'Supprimer',
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+
         const SizedBox(height: 24),
         if (_chapters.isNotEmpty) ...[
           const Text('Chapitres existants',
@@ -417,11 +577,15 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
   }
 
   Widget _buildSectionForm() {
+    final isEditing = _editingSectionId != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Nouvelle section',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        Text(
+          isEditing ? 'Modifier la section' : 'Nouvelle section',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
         const SizedBox(height: 16),
         DropdownButtonFormField<String>(
           value: _selectedChapterId,
@@ -494,43 +658,43 @@ class _AddBookContentPageState extends ConsumerState<AddBookContentPage> {
           ),
         ),
         const SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: _saving ? null : _saveSection,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0A1F44),
-              foregroundColor: Colors.white,
+        Row(
+          children: [
+            if (isEditing) ...[
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _cancelEditSection,
+                  child: const Text('Annuler'),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              flex: isEditing ? 2 : 1,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _saveSection,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0A1F44),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(isEditing
+                          ? 'Enregistrer la section'
+                          : 'Ajouter la section'),
+                ),
+              ),
             ),
-            child: _saving
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text('Ajouter la section'),
-          ),
+          ],
         ),
       ],
     );
   }
-}
-
-// Helpers temporaires (à déplacer dans BookContentService si tu veux)
-Future<void> SupabaseUpdateChapter({
-  required String id,
-  required String title,
-  required int chapterNumber,
-}) async {
-  await Supabase.instance.client.from('book_chapters').update({
-    'title': title,
-    'chapter_number': chapterNumber,
-  }).eq('id', id);
-}
-
-Future<void> SupabaseDeleteChapter(String id) async {
-  // Les sections sont supprimées automatiquement grâce à ON DELETE CASCADE
-  await Supabase.instance.client.from('book_chapters').delete().eq('id', id);
 }
