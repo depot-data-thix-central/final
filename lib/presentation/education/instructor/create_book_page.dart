@@ -35,13 +35,19 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
 
   String _imageUrl = '';
   String _selectedCurrency = 'FC';
+  String? _shelfCode; // null = nouvelle étagère auto
+  String _category = 'Général';
+  List<String> _existingShelves = [];
+
   bool _isLoading = false;
   bool _isInitLoading = false;
   bool _isUploadingImage = false;
+  bool _loadingShelves = false;
 
   @override
   void initState() {
     super.initState();
+    _loadShelves();
     if (widget.bookId != null) {
       _loadExistingBook();
     } else {
@@ -61,6 +67,35 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
     super.dispose();
   }
 
+  String _generateShelfCode(String author) {
+    final name = author.trim().isEmpty ? 'Auteur' : author.trim();
+    final hash = name.hashCode.abs().toRadixString(16).toUpperCase();
+    final short =
+        hash.length >= 4 ? hash.substring(0, 4) : hash.padLeft(4, '0');
+    return 'THIX-B-$short';
+  }
+
+  Future<void> _loadShelves() async {
+    setState(() => _loadingShelves = true);
+    try {
+      final res = await Supabase.instance.client
+          .from('books')
+          .select('shelf_code')
+          .not('shelf_code', 'is', null);
+      final codes = (res as List)
+          .map((e) => e['shelf_code'] as String?)
+          .whereType<String>()
+          .toSet()
+          .toList()
+        ..sort();
+      if (mounted) setState(() => _existingShelves = codes);
+    } catch (e) {
+      debugPrint('Erreur chargement étagères: $e');
+    } finally {
+      if (mounted) setState(() => _loadingShelves = false);
+    }
+  }
+
   Future<void> _loadExistingBook() async {
     setState(() => _isInitLoading = true);
     try {
@@ -77,8 +112,11 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
           _descriptionController.text = data['description']?.toString() ?? '';
           _priceController.text = data['price']?.toString() ?? '0';
           _selectedCurrency = data['currency']?.toString() ?? 'FC';
-          _imageUrl =
-              data['image_url']?.toString() ?? data['cover_url']?.toString() ?? '';
+          _imageUrl = data['image_url']?.toString() ??
+              data['cover_url']?.toString() ??
+              '';
+          _shelfCode = data['shelf_code']?.toString();
+          _category = data['category']?.toString() ?? 'Général';
         });
       }
     } catch (e) {
@@ -148,7 +186,8 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
 
     if (_isUploadingImage) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Patientez pendant l\'upload de l\'image.')),
+        const SnackBar(
+            content: Text('Patientez pendant l\'upload de l\'image.')),
       );
       return;
     }
@@ -159,13 +198,16 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw Exception('Utilisateur non connecté.');
 
+      final author = _authorController.text.trim();
       final payload = {
         'title': _titleController.text.trim(),
-        'author': _authorController.text.trim(),
+        'author': author,
         'description': _descriptionController.text.trim(),
         'price': double.tryParse(_priceController.text.trim()) ?? 0.0,
         'currency': _selectedCurrency,
         'image_url': _imageUrl.isEmpty ? null : _imageUrl,
+        'shelf_code': _shelfCode ?? _generateShelfCode(author),
+        'category': _category,
         'updated_at': DateTime.now().toIso8601String(),
       };
 
@@ -199,7 +241,6 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
         ),
       );
 
-      // Après création → aller directement gérer le contenu (chapitres/sections)
       if (widget.bookId == null && bookId != null) {
         context.pushReplacement('/instructor/books/$bookId/content');
       } else {
@@ -218,6 +259,9 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.bookId != null;
+    final previewShelf = _shelfCode ??
+        _generateShelfCode(
+            _authorController.text.isEmpty ? 'Auteur' : _authorController.text);
 
     return Scaffold(
       backgroundColor: _C.bg,
@@ -276,6 +320,7 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
                             icon: Icons.person_outline_rounded,
                             validator: (v) =>
                                 v!.trim().isEmpty ? 'Requis' : null,
+                            onChanged: (_) => setState(() {}), // refresh preview étagère
                           ),
                           const SizedBox(height: 16),
                           _buildTextField(
@@ -325,12 +370,68 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 16),
+
+                          // —— CATÉGORIE ——
+                          DropdownButtonFormField<String>(
+                            value: _category,
+                            dropdownColor: _C.surface,
+                            decoration: _inputDecoration(
+                                'Catégorie', Icons.category_outlined),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'Général', child: Text('Général')),
+                              DropdownMenuItem(
+                                  value: 'Entrepreneuriat',
+                                  child: Text('Entrepreneuriat')),
+                              DropdownMenuItem(
+                                  value: 'Droit', child: Text('Droit')),
+                              DropdownMenuItem(
+                                  value: 'Nouveau', child: Text('Nouveau')),
+                              DropdownMenuItem(
+                                  value: 'À venir', child: Text('À venir')),
+                              DropdownMenuItem(
+                                  value: 'Éducation', child: Text('Éducation')),
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _category = v ?? 'Général'),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // —— ÉTAGÈRE ——
+                          DropdownButtonFormField<String?>(
+                            value: _shelfCode,
+                            dropdownColor: _C.surface,
+                            decoration:
+                                _inputDecoration('Étagère', Icons.shelves),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Nouvelle étagère (auto)'),
+                              ),
+                              ..._existingShelves.map(
+                                (s) => DropdownMenuItem<String?>(
+                                  value: s,
+                                  child: Text(s),
+                                ),
+                              ),
+                            ],
+                            onChanged: (v) => setState(() => _shelfCode = v),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _shelfCode == null
+                                ? 'Code généré : $previewShelf'
+                                : 'Étagère sélectionnée : $_shelfCode',
+                            style: const TextStyle(
+                                fontSize: 12, color: _C.textMuted),
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
 
-                    // ========== COUVERTURE UNIQUEMENT ==========
+                    // ========== COUVERTURE ==========
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -375,8 +476,11 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
-                                            Icon(Icons.add_photo_alternate_outlined,
-                                                size: 40, color: _C.textMuted),
+                                            Icon(
+                                                Icons
+                                                    .add_photo_alternate_outlined,
+                                                size: 40,
+                                                color: _C.textMuted),
                                             SizedBox(height: 8),
                                             Text(
                                               'Appuyer pour choisir une image',
@@ -458,6 +562,7 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     String? hintText,
+    void Function(String)? onChanged,
   }) {
     return TextFormField(
       controller: controller,
@@ -465,6 +570,7 @@ class _CreateBookPageState extends ConsumerState<CreateBookPage> {
       maxLines: maxLines,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
+      onChanged: onChanged,
       decoration: _inputDecoration(label, icon, hintText: hintText),
     );
   }
