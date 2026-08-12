@@ -15,8 +15,8 @@ class Book {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final DateTime? scheduledDeletionAt;
-final String? shelfCode;
-final String? category;
+  final String? shelfCode;
+
   Book({
     required this.id,
     required this.title,
@@ -32,6 +32,7 @@ final String? category;
     required this.updatedAt,
     this.deletedAt,
     this.scheduledDeletionAt,
+    this.shelfCode,
   });
 
   factory Book.fromJson(Map<String, dynamic> json) => Book(
@@ -57,8 +58,7 @@ final String? category;
         scheduledDeletionAt: json['scheduled_deletion_at'] != null
             ? DateTime.parse(json['scheduled_deletion_at'] as String)
             : null,
-    shelfCode: json['shelf_code'] as String?,
-category: json['category'] as String?,
+        shelfCode: json['shelf_code'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -76,6 +76,7 @@ category: json['category'] as String?,
         'updated_at': updatedAt.toIso8601String(),
         'deleted_at': deletedAt?.toIso8601String(),
         'scheduled_deletion_at': scheduledDeletionAt?.toIso8601String(),
+        'shelf_code': shelfCode,
       };
 
   bool get isScheduledForDeletion =>
