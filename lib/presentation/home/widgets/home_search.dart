@@ -1,31 +1,24 @@
 // lib/presentation/home/widgets/home_search.dart
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart'; // 🌟 Ajout pour la navigation
-import 'package:thix_id/l10n/app_localizations.dart';
+import 'package:go_router/go_router.dart'; 
 import 'package:thix_id/core/theme/thix_design_policy.dart';
 
 class HomeSearch extends StatelessWidget {
   final TextEditingController controller;
   final bool isSearching;
   final VoidCallback onVerify;
-  
-  // 🌟 Optionnel : Tu pourras passer cette variable à false si l'utilisateur n'est pas encore vérifié
-  final bool isUserVerified; 
 
   const HomeSearch({
     super.key,
     required this.controller,
     required this.isSearching,
     required this.onVerify,
-    this.isUserVerified = true, // Par défaut à true
   });
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    
     return Container(
-      height: ThixPolicy.searchBarHeight, // Utilise la policy ! (48)
+      height: ThixPolicy.searchBarHeight, 
       padding: const EdgeInsets.only(left: ThixPolicy.s16, right: ThixPolicy.s6),
       decoration: BoxDecoration(
         color: ThixPolicy.card,
@@ -43,35 +36,26 @@ class HomeSearch extends StatelessWidget {
               enabled: !isSearching,
               textAlignVertical: TextAlignVertical.center,
               style: ThixPolicy.bodyMediumStyle,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 fillColor: Colors.transparent,
                 filled: false,
-                hintText: 'THIX ID...',
-                hintStyle: ThixPolicy.bodySmallStyle,
+                // 🌟 NOUVEAU : Texte incluant les deux services
+                hintText: 'Saisir un THIX ID ou Scanner...',
+                hintStyle: TextStyle(color: ThixPolicy.textSecondary, fontSize: 13),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
           ),
-          
-          // 🌟 NOUVEAU : Icône "Compte Vérifié"
-          if (isUserVerified) ...[
-            Tooltip(
-              message: 'Votre compte est vérifié',
-              child: Icon(Icons.verified_rounded, color: ThixPolicy.primary, size: 20),
-            ),
-            const SizedBox(width: ThixPolicy.s8),
-          ],
 
-          // 🌟 NOUVEAU : Bouton Scanner QR Code (Parrainage)
+          // 🌟 BOUTON 1 : Scanner QR Code (Parrainage)
           GestureDetector(
             onTap: () {
-              // Ouvre l'écran du scanner QR pour le parrainage
-              // Adapte le nom de la route si elle s'appelle autrement dans ton fichier router.dart
-              context.push('/network/scanner_activation'); 
+              // 🌟 CORRECTION DE LA ROUTE : Chemin direct vers le scanner
+              context.push('/scanner_activation'); 
             },
             child: Container(
               height: 34,
@@ -88,21 +72,25 @@ class HomeSearch extends StatelessWidget {
           
           const SizedBox(width: ThixPolicy.s8),
           
-          // Bouton "Vérifier" (Existant)
+          // 🌟 BOUTON 2 : Vérifier (Même design que le QR Code)
           GestureDetector(
             onTap: isSearching ? null : onVerify,
             child: Container(
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
+              height: 34,
+              width: 34,
               decoration: BoxDecoration(
-                gradient: ThixPolicy.brandGradient,
-                borderRadius: BorderRadius.circular(ThixPolicy.rMd),
+                color: ThixPolicy.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: ThixPolicy.border),
               ),
               alignment: Alignment.center,
-              child: Text(
-                l10n.t('home_verify_btn'),
-                style: const TextStyle(color: ThixPolicy.onBrand, fontWeight: ThixPolicy.bold, fontSize: 12),
-              ),
+              child: isSearching
+                  ? const SizedBox(
+                      width: 14, 
+                      height: 14, 
+                      child: CircularProgressIndicator(strokeWidth: 2, color: ThixPolicy.textMain)
+                    )
+                  : const Icon(Icons.person_search_rounded, color: ThixPolicy.textMain, size: 18),
             ),
           ),
         ],
