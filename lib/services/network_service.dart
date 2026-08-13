@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart'; // ✅ Ajout pour la compression
 
 import '../models/network_post.dart';
 import '../models/network_connection.dart';
@@ -1262,7 +1263,7 @@ class NetworkService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // UPLOAD
+  // UPLOAD AVEC COMPRESSION INTÉGRÉE 🌟
   // ─────────────────────────────────────────────────────────────
 
   Future<String?> uploadImageBytes(
@@ -1279,9 +1280,35 @@ class NetworkService extends ChangeNotifier {
       final mimeType =
           isVideo ? 'video/$fileExtension' : 'image/$fileExtension';
 
+      Uint8List finalBytes = bytes;
+
+      // 🌟 Compression des images avant l'envoi
+      if (!isVideo && !kIsWeb) {
+        try {
+          final compressFormat = fileExtension.toLowerCase() == 'png' 
+              ? CompressFormat.png 
+              : CompressFormat.jpeg;
+
+          final compressed = await FlutterImageCompress.compressWithList(
+            bytes,
+            minWidth: 1080, // Redimensionnement intelligent
+            minHeight: 1080,
+            quality: 80, // Compression à 80% (excellent compromis qualité/poids)
+            format: compressFormat,
+          );
+          
+          if (compressed.isNotEmpty) {
+            finalBytes = compressed;
+          }
+        } catch (e) {
+          debugPrint('Erreur de compression (utilisation de l\'image brute) : $e');
+        }
+      }
+
+      // Envoi du fichier (compressé ou brut) vers Supabase
       await _supabase.storage.from(bucket).uploadBinary(
             path,
-            bytes,
+            finalBytes,
             fileOptions: FileOptions(contentType: mimeType, upsert: true),
           );
 
