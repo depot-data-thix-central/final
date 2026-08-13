@@ -368,12 +368,11 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
   }
 
   // 🌟 NOUVEAU : Logique d'affichage du QR Code de parrainage
-    Future<void> _showQrParrainageDialog() async {
+      Future<void> _showQrParrainageDialog() async {
     final email = _emailC.text.trim().toLowerCase();
     final password = _passwordC.text;
     final phone = _phoneC.text.trim();
 
-    // Vérifications de base des champs du compte
     if (email.isEmpty || !_isValidEmail(email)) {
       _snack('Veuillez d\'abord saisir une adresse email valide.', isError: true);
       return;
@@ -385,13 +384,11 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
 
     if (!mounted) return;
     
-    // Ouvre directement le dialogue du QR Code sans envoyer d'OTP
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => QrParrainageDialog(
+      builder: (_) => SecureQrParrainageDialog(
         email: email,
-        password: password,
         phone: phone,
         fullName: _nameC.text.trim(),
         country: _country,
@@ -402,6 +399,7 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
       ),
     );
   }
+
 
     // Factorisation de la finalisation pour l'OTP et le Parrainage
   Future<void> _completeRegistration({required bool isParrainage}) async {
@@ -964,7 +962,7 @@ class _SummaryRow extends StatelessWidget {
 }
 
 // ============================================================================
-// WIDGET : DIALOGUE DE PARRAINAGE (QR CODE)
+// WIDGET : DIALOGUE DE PARRAINAGE SÉCURISÉ (PRODUCTION)
 // ============================================================================
 class SecureQrParrainageDialog extends StatefulWidget {
   final String email;
@@ -1000,7 +998,6 @@ class _SecureQrParrainageDialogState extends State<SecureQrParrainageDialog> {
 
   Future<String> _generateTokenFromServer() async {
     try {
-      // Appel de la procédure stockée sécurisée sur Supabase
       final response = await Supabase.instance.client.rpc(
         'generate_qr_activation_token',
         params: {
@@ -1014,7 +1011,6 @@ class _SecureQrParrainageDialogState extends State<SecureQrParrainageDialog> {
 
       final token = response.toString();
       
-      // Écoute temps réel de l'activation du compte par un parrain
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId != null) {
         _statusSubscription = Supabase.instance.client
@@ -1052,7 +1048,7 @@ class _SecureQrParrainageDialogState extends State<SecureQrParrainageDialog> {
           future: _tokenFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(
+              return SizedBox(
                 height: 250,
                 child: Center(
                   child: CircularProgressIndicator(color: ThixPolicy.primary),
@@ -1085,14 +1081,14 @@ class _SecureQrParrainageDialogState extends State<SecureQrParrainageDialog> {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.qr_code_scanner_rounded, color: ThixPolicy.primary, size: 40),
+                Icon(Icons.qr_code_scanner_rounded, color: ThixPolicy.primary, size: 40),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Activation Sécurisée',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: ThixPolicy.primary),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Faites scanner ce code par un pair accrédité pour valider l\'identité.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: ThixPolicy.textSecondary, fontSize: 13),
@@ -1112,7 +1108,7 @@ class _SecureQrParrainageDialogState extends State<SecureQrParrainageDialog> {
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textMain)),
+                  child: Text('Annuler', style: TextStyle(color: ThixPolicy.textMain)),
                 ),
               ],
             );
@@ -1122,3 +1118,7 @@ class _SecureQrParrainageDialogState extends State<SecureQrParrainageDialog> {
     );
   }
 }
+
+
+
+
