@@ -224,8 +224,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final postsAsync = ref.watch(userPostsProvider(uid));
     final pinnedAsync = ref.watch(pinnedPostsProvider(uid));
 
-    // 🌟 CORRECTION MAJEURE ICI : 
-    // On extrait les données pour éviter que l'UI ne disparaisse lors du refresh (invalidate)
     final userProfile = profileAsync.valueOrNull;
 
     return Scaffold(
@@ -548,7 +546,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ),
                     const SizedBox(width: 8),
                     
-                    // 🌟 CORRECTION ICI : Utilisation de la mémoire cache pour ne pas faire disparaitre le bouton
                     Consumer(
                       builder: (context, ref, _) {
                         final followAsync = ref.watch(followStatusProvider(uid));
@@ -626,9 +623,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       ),
       child: Row(
         children: [
-          _statTile('${u['followers_count'] ?? 0}', 'Abonnés', () => context.push('/network/connections?tab=followers&uid=$uid')),
+          // 👇 REDIRECTION VERS LA LISTE DES ABONNÉS
+          _statTile('${u['followers_count'] ?? 0}', 'Abonnés', () => context.push('/network/followers/$uid')),
           Container(width: 1, height: 28, color: ThixPolicy.border),
-          _statTile('${u['following_count'] ?? 0}', 'Abonnements', () => context.push('/network/connections?tab=following&uid=$uid')),
+          // 👇 REDIRECTION VERS LA LISTE DES ABONNEMENTS
+          _statTile('${u['following_count'] ?? 0}', 'Abonnements', () => context.push('/network/following/$uid')),
           Container(width: 1, height: 28, color: ThixPolicy.border),
           _statTile('${u['posts_count'] ?? 0}', 'Publications', () {
             _scrollController.animateTo(350, duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
