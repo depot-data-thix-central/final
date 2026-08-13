@@ -238,7 +238,7 @@ class _CourseCreatePageState extends ConsumerState<CourseCreatePage> {
 
       final ext = file.extension ?? 'png';
       final name =
-          '\( {isLogo ? 'logo' : 'sign'}_ \){DateTime.now().millisecondsSinceEpoch}.$ext';
+          '${isLogo ? 'logo' : 'sign'}_${DateTime.now().millisecondsSinceEpoch}.$ext';
       final path = 'certificates/$name';
 
       await Supabase.instance.client.storage
