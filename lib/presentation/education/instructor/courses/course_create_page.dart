@@ -1,3 +1,4 @@
+
 // lib/presentation/education/instructor/courses/course_create_page.dart
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:thix_id/presentation/education/models/module.dart';
 import 'package:thix_id/presentation/education/models/lesson.dart';
 import 'package:thix_id/presentation/education/instructor/content/module_management_page.dart';
 import 'package:thix_id/presentation/education/widgets/common/education_category_chip.dart';
+import 'package:thix_id/presentation/education/widgets/certificate_canvas.dart';
 
 class CourseCreatePage extends ConsumerStatefulWidget {
   final String? courseId;
@@ -430,6 +432,107 @@ class _CourseCreatePageState extends ConsumerState<CourseCreatePage> {
     );
   }
 
+  // 👇 MÉTHODE D'APERÇU DU CERTIFICAT INTÉGRÉE ET CORRIGÉE 👇
+  void _showCertificatePreview() {
+    final now = DateTime.now();
+    // /!\ Assure-toi que CertificateData est bien importé en haut du fichier
+    final data = CertificateData(
+      academyName: _instructorController.text.trim().isEmpty
+          ? 'THIX Academy'
+          : _instructorController.text.trim(),
+      header: _certHeaderController.text.trim().isEmpty
+          ? 'certifie que'
+          : _certHeaderController.text.trim(),
+      learnerName: 'Jean Mukendi', // démo — en prod = profil apprenant
+      body: _certBodyController.text.trim().isEmpty
+          ? 'a complété avec succès la formation.'
+          : _certBodyController.text.trim(),
+      courseTitle: _titleController.text.trim().isEmpty
+          ? 'Titre de la formation'
+          : _titleController.text.trim(),
+      footer: _certFooterController.text.trim().isEmpty
+          ? 'Fait à Kinshasa'
+          : _certFooterController.text.trim(),
+      signatoryName: _certSignatoryNameController.text.trim().isEmpty
+          ? 'Signataire'
+          : _certSignatoryNameController.text.trim(),
+      signatoryTitle: _certSignatoryTitleController.text.trim(),
+      logoUrl: _certLogoUrl,
+      signatureUrl: _certSignatureUrl,
+      serial: 'THIX-CERT-${now.year}-PREVIEW',
+      // Format de date corrigé avec l'interpolation standard Dart ($)
+      dateLabel: '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}',
+      templateId: _certTemplateId,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(ctx).size.height * 0.92,
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F172A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 8, 8),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Aperçu certificat',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: CertificateCanvas(
+                      data: data,
+                      width: MediaQuery.of(ctx).size.width - 48,
+                    ),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 20),
+                child: Text(
+                  'Produit par THIX ID CENTRAL  ·  Aperçu non officiel',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildCertificateSection() {
     return Container(
       margin: const EdgeInsets.only(top: ThixPolicy.s16),
@@ -612,6 +715,25 @@ class _CourseCreatePageState extends ConsumerState<CourseCreatePage> {
               ],
             ),
           ],
+          
+          // 👇 BOUTON AJOUTÉ POUR DÉCLENCHER L'APERÇU 👇
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _showCertificatePreview,
+              icon: const Icon(Icons.visibility_rounded, size: 18),
+              label: const Text('Aperçu du certificat', style: TextStyle(fontWeight: FontWeight.w800)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(ThixPolicy.rMd),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
