@@ -58,11 +58,25 @@ class UserPostsNotifier extends FamilyAsyncNotifier<List<NetworkPost>, String> {
   }
 }
 
-final followStatusProvider = FutureProvider.family<bool, String>((ref, targetId) async {
+final followStatusProvider =
+    FutureProvider.family<bool, String>((ref, targetId) async {
+  final supabase = Supabase.instance.client;
+  final me = supabase.auth.currentUser?.id;
+  if (me == null || me.isEmpty || targetId.isEmpty || me == targetId) {
+    return false;
+  }
+
   try {
-    final supabase = Supabase.instance.client;
-    final currentUserId = supabase.auth.currentUser!.id;
-    final res = await supabase.from('connections').select().eq('user_id', currentUserId).eq('status', 'accepted');
-    return (res as List).any((r) => (r['connection_id']?? r['friend_id']?? r['connected_user_id']?? r['following_id']?? r['target_id']?? r['receiver_id']) == targetId);
-  } catch (_) { return false; }
+    // Source de vérité = table follows (comme followUser)
+    final res = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('follower_id', me)
+        .eq('following_id', targetId)
+        .maybeSingle();
+    return res != null;
+  } catch (e) {
+    debugPrint('followStatusProvider error: $e');
+    return false;
+  }
 });
