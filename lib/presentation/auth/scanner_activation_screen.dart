@@ -19,7 +19,6 @@ class _ScannerActivationScreenState extends State<ScannerActivationScreen> with 
   final MobileScannerController _cameraController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
-    torchEnabled: false,
   );
 
   @override
@@ -37,11 +36,11 @@ class _ScannerActivationScreenState extends State<ScannerActivationScreen> with 
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Gestion propre de la caméra quand l'application passe en arrière-plan
+    // 🌟 CORRECTION 1 : Remplacement de "background" par "paused" (Nouvelle API Flutter)
     if (!_cameraController.value.isInitialized) {
       return;
     }
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.background) {
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
       _cameraController.stop();
     } else if (state == AppLifecycleState.resumed) {
       _cameraController.start();
@@ -129,14 +128,18 @@ class _ScannerActivationScreenState extends State<ScannerActivationScreen> with 
         elevation: 0,
         actions: [
           IconButton(
-            icon: ValueListenableBuilder(
-              valueListenable: _cameraController.torchState,
+            // 🌟 CORRECTION 2 : On écoute le contrôleur entier (Nouvelle API mobile_scanner)
+            icon: ValueListenableBuilder<MobileScannerState>(
+              valueListenable: _cameraController,
               builder: (context, state, child) {
-                switch (state) {
+                // 🌟 CORRECTION 3 : Switch sécurisé avec un "default" pour éviter le retour null
+                switch (state.torchState) {
                   case TorchState.off:
                     return const Icon(Icons.flash_off_rounded, color: Colors.white);
                   case TorchState.on:
                     return const Icon(Icons.flash_on_rounded, color: Colors.amber);
+                  default:
+                    return const Icon(Icons.flash_off_rounded, color: Colors.grey);
                 }
               },
             ),
