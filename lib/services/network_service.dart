@@ -904,31 +904,25 @@ class NetworkService extends ChangeNotifier {
 
   /// ✅ FOLLOW IMMÉDIAT (pas besoin d’approbation)
   Future<void> followUser(String targetId) async {
-    if (currentUserId.isEmpty || targetId == currentUserId) return;
-
-    try {
-      await _supabase.from('follows').upsert({
-        'follower_id': currentUserId,
-        'following_id': targetId,
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'follower_id,following_id');
-
-      unawaited(_createNotification(userId: targetId, type: 'follow'));
-      notifyListeners();
-    } catch (e) {
-      debugPrint('followUser error: $e');
-
-      try {
-        await _supabase.from('connections').upsert({
-          'user1_id': currentUserId,
-          'user2_id': targetId,
-        }, onConflict: 'user1_id,user2_id');
-        notifyListeners();
-      } catch (e2) {
-        debugPrint('followUser fallback error: $e2');
-        rethrow;
-      }
+    if (currentUserId.isEmpty) {
+      throw Exception('Non authentifié');
     }
+    if (targetId.isEmpty || targetId == currentUserId) {
+      throw Exception('Cible invalide');
+    }
+
+    await _supabase.from('follows').upsert({
+      'follower_id': currentUserId,
+      'following_id': targetId,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'follower_id,following_id');
+
+    // Ne pas faire échouer le follow si la notif plante
+    try {
+      unawaited(_createNotification(userId: targetId, type: 'follow'));
+    } catch (_) {}
+
+    notifyListeners();
   }
 
   /// Unfollow
