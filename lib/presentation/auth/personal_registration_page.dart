@@ -400,7 +400,7 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
     );
   }
 
-  // Factorisation de la finalisation pour l'OTP et le Parrainage
+    // Factorisation de la finalisation pour l'OTP et le Parrainage
   Future<void> _completeRegistration({required bool isParrainage}) async {
     final authNotifier = ref.read(authControllerProvider.notifier);
 
@@ -418,8 +418,12 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
         );
       }
       
-      final me = ref.read(authControllerProvider).value ?? Supabase.instance.client.auth.currentUser;
-      if (me == null) throw Exception('Utilisateur introuvable.');
+      // 🌟 CORRECTION ICI : Extraction explicite et sécurisée de l'ID
+      final appUser = ref.read(authControllerProvider).value;
+      final supaUser = Supabase.instance.client.auth.currentUser;
+      final uid = appUser?.id ?? supaUser?.id;
+
+      if (uid == null) throw Exception('Utilisateur introuvable.');
       
       // Configuration ThixChat
       final firstName = _nameC.text.isNotEmpty ? _nameC.text.split(' ').first.toLowerCase() : 'user';
@@ -432,7 +436,8 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
         return;
       }
 
-      final claimed = await _userService.ensureThixChat(uid: me.id, desired: desiredChat);
+      // Utilisation du 'uid' fraîchement extrait
+      final claimed = await _userService.ensureThixChat(uid: uid, desired: desiredChat);
 
       // Génération THIX ID
       String officialThixId;
@@ -449,16 +454,16 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
 
       // Mise à jour DB (Le profil passe en actif définitivement)
       await _userService.updateProfile(
-        uid: me.id,
+        uid: uid,
         thixId: officialThixId,
         thixChat: claimed,
         registrationStatus: 'active',
       );
 
-      // Met à jour la mémoire de l'app
-      if (ref.read(authControllerProvider).value != null) {
+      // 🌟 CORRECTION ICI : Mise à jour de la mémoire de l'app via appUser
+      if (appUser != null) {
         await authNotifier.updateCurrentUser(
-          ref.read(authControllerProvider).value!.copyWith(
+          appUser.copyWith(
             thixId: officialThixId,
             thixChat: claimed,
             registrationStatus: 'active',
@@ -480,6 +485,7 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
       _snack(_userFacingError(e), isError: true);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
