@@ -305,20 +305,47 @@ class FormationLessonPlayer extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (safeLesson.description != null && safeLesson.description!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: Text(
-                        safeLesson.description!,
-                        style: const TextStyle(fontSize: 15, color: Color(0xFF475569), height: 1.6),
-                      ),
-                    ),
-                  
+                  // 1. CONTENU PRINCIPAL (vidéo / quiz / texte) EN HAUT
                   _buildLessonContent(context, safeLesson, state, notifier),
 
                   const SizedBox(height: 24),
 
-                  if (!state.isCompleted && safeLesson.type != 'video' && safeLesson.type != 'quiz')
+                  // 2. DESCRIPTION / TEXTE EN BAS
+                  if (safeLesson.description != null &&
+                      safeLesson.description!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Text(
+                        safeLesson.description!,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: Color(0xFF475569),
+                          height: 1.6,
+                        ),
+                      ),
+                    ),
+
+                  // Si type vidéo mais content texte aussi utile :
+                  // (optionnel) afficher content texte sous la vidéo
+                  if (safeLesson.type == 'video' &&
+                      safeLesson.content != null &&
+                      safeLesson.content!.isNotEmpty &&
+                      !safeLesson.content!.startsWith('http'))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Text(
+                        safeLesson.content!,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: Color(0xFF1E293B),
+                          height: 1.6,
+                        ),
+                      ),
+                    ),
+
+                  if (!state.isCompleted &&
+                      safeLesson.type != 'video' &&
+                      safeLesson.type != 'quiz')
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -326,19 +353,34 @@ class FormationLessonPlayer extends ConsumerWidget {
                         onPressed: state.isUpdating
                             ? null
                             : () async {
-                                // ✅ Envoi de formationId
-                                final success = await notifier.markAsCompleted(formationId);
+                                final success =
+                                    await notifier.markAsCompleted(formationId);
                                 if (success && onComplete != null) onComplete!();
                               },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2D6CDF),
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
                         child: state.isUpdating
-                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('Marquer comme terminé', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Marquer comme terminé',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
                       ),
                     ),
 
@@ -349,16 +391,23 @@ class FormationLessonPlayer extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: const Color(0xFF2ECC71).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF2ECC71).withOpacity(0.3)),
+                        border: Border.all(
+                          color: const Color(0xFF2ECC71).withOpacity(0.3),
+                        ),
                       ),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.check_circle_rounded, color: Color(0xFF2ECC71)),
+                          Icon(Icons.check_circle_rounded,
+                              color: Color(0xFF2ECC71)),
                           SizedBox(width: 8),
                           Text(
                             'Leçon terminée ! 🎉',
-                            style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF2ECC71), fontSize: 16),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF2ECC71),
+                              fontSize: 16,
+                            ),
                           ),
                         ],
                       ),
