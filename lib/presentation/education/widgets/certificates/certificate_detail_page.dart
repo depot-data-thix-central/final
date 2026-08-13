@@ -68,7 +68,8 @@ class _CertificateDetailPageState extends State<CertificateDetailPage> {
         'THIX Academy';
     final issued = c.issuedAt;
     final dateStr =
-        '\( {issued.day.toString().padLeft(2, '0')}/ \){issued.month.toString().padLeft(2, '0')}/${issued.year}';
+        '${issued.day.toString().padLeft(2, '0')}/${issued.month.toString().padLeft(2, '0')}/${issued.year}';
+
 
     return CertificateData(
       academyName: academy,
