@@ -106,15 +106,6 @@ class ConnectionsNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
             'connected_at': conn['created_at'],
           });
         }
-        
-        if (_search.isNotEmpty) {
-          final q = _search.toLowerCase();
-          return list
-              .where((c) =>
-                  (c['display_name'] as String).toLowerCase().contains(q))
-              .toList();
-        }
-        
         return list;
       } catch (e2) {
         debugPrint('connectionsProvider fallback error: $e2');
@@ -163,7 +154,7 @@ class ConnectionsNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
         await Supabase.instance.client
             .from('connections')
             .delete()
-            .or('and(user1_id.eq.${profiles.uid},user2_id.eq.$targetUserId),and(user1_id.eq.$targetUserId,user2_id.eq.${profiles.uid})'); 
+            .eq('id', targetUserId);
       } catch (_) {}
       state = AsyncData(current);
       rethrow;
@@ -185,7 +176,6 @@ class ConnectionsListPage extends ConsumerStatefulWidget {
 class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
   final _scroll = ScrollController();
   final _searchCtrl = TextEditingController();
-  bool _isSearching = false; // 🌟 Ajout pour gérer l'état de la barre de recherche
 
   @override
   void initState() {
@@ -214,7 +204,7 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textSecondary)),
+            child: const Text('Annuler'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
@@ -233,14 +223,14 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Vous ne suivez plus $userName'),
-            backgroundColor: ThixPolicy.success,
+            backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e'), backgroundColor: ThixPolicy.danger),
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -255,85 +245,62 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
       appBar: AppBar(
         backgroundColor: ThixPolicy.card,
         elevation: 0.5,
-        title: _isSearching 
-            // 🌟 Barre de recherche intégrée (Remplace le vieux Dialog)
-            ? TextField(
-                controller: _searchCtrl,
-                autofocus: true,
-                style: const TextStyle(fontSize: 15, color: ThixPolicy.textMain),
-                decoration: InputDecoration(
-                  hintText: 'Rechercher un abonnement...',
-                  hintStyle: const TextStyle(color: ThixPolicy.textSecondary),
-                  border: InputBorder.none,
-                ),
-                onChanged: (v) => ref.read(connectionsProvider.notifier).search(v),
-              )
-            : Row(
-                children: [
-                  Text(
-                    'Mes abonnements',
-                    style: ThixPolicy.titleStyle.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  asyncConnections.when(
-                    data: (l) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: ThixPolicy.gold.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${l.length}',
-                        style: const TextStyle(
-                          color: ThixPolicy.gold,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    loading: () => const SizedBox(),
-                    error: (_, __) => const SizedBox(),
-                  ),
-                ],
+        title: Row(
+          children: [
+            Text(
+              'Mes abonnements',
+              style: ThixPolicy.titleStyle.copyWith(
+                fontWeight: FontWeight.w800,
               ),
+            ),
+            const SizedBox(width: 8),
+            asyncConnections.when(
+              data: (l) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: ThixPolicy.gold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${l.length}',
+                  style: TextStyle(
+                    color: ThixPolicy.gold,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              loading: () => const SizedBox(),
+              error: (_, __) => const SizedBox(),
+            ),
+          ],
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: ThixPolicy.textMain, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new,
+              color: ThixPolicy.textMain, size: 20),
           onPressed: () => context.pop(),
         ),
         actions: [
           IconButton(
-            icon: Icon(
-              _isSearching ? Icons.close_rounded : Icons.search_rounded, 
-              color: ThixPolicy.textMain, 
-              size: 22
-            ),
-            onPressed: () {
-              setState(() {
-                if (_isSearching) {
-                  _isSearching = false;
-                  _searchCtrl.clear();
-                  ref.read(connectionsProvider.notifier).search('');
-                } else {
-                  _isSearching = true;
-                }
-              });
-            },
+            icon: Icon(Icons.search, color: ThixPolicy.textMain, size: 22),
+            onPressed: _showSearch,
           ),
         ],
       ),
       body: asyncConnections.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: ThixPolicy.primary)),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _buildErrorWidget(e.toString()),
         data: (connections) => connections.isEmpty
             ? _buildEmptyWidget()
             : RefreshIndicator(
                 color: ThixPolicy.gold,
-                onRefresh: () async => ref.invalidate(connectionsProvider),
+                onRefresh: () async =>
+                    ref.invalidate(connectionsProvider),
                 child: ListView.builder(
                   controller: _scroll,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   itemCount: connections.length + 1,
                   itemBuilder: (context, index) {
                     if (index == connections.length) {
@@ -341,7 +308,8 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
                           ? const Padding(
                               padding: EdgeInsets.all(16),
                               child: Center(
-                                child: CircularProgressIndicator(strokeWidth: 2, color: ThixPolicy.primary),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
                               ),
                             )
                           : const SizedBox(height: 20);
@@ -355,9 +323,10 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
                       profession: conn['profession'],
                       bio: conn['bio'],
                       connectedAt: conn['connected_at'] ?? '',
-                      onTap: () => context.push('/network/profile/${conn['user_id']}'),
-                      // 🌟 CORRECTION DE LA ROUTE DU CHAT ICI
-                      onMessageTap: () => context.push('/network/messages/chat/${conn['user_id']}'),
+                      onTap: () => context
+                          .push('/network/profile/${conn['user_id']}'),
+                      onMessageTap: () => context
+                          .push('/network/chat/${conn['user_id']}'),
                       onRemoveTap: () => _removeConnection(
                         conn['user_id'],
                         conn['display_name'],
@@ -410,12 +379,12 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
             ),
           ),
           const SizedBox(height: 24),
-           Text(
+          Text(
             'Aucun abonnement',
             style: ThixPolicy.h3Style,
           ),
           const SizedBox(height: 8),
-           Text(
+          Text(
             'Commencez à suivre des professionnels\nde votre secteur.',
             textAlign: TextAlign.center,
             style: ThixPolicy.bodySmallStyle,
@@ -433,6 +402,31 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSearch() {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Rechercher'),
+        content: TextField(
+          controller: _searchCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Nom...',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onChanged: (v) =>
+              ref.read(connectionsProvider.notifier).search(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Fermer'),
           ),
         ],
       ),
