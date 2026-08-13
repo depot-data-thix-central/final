@@ -28,8 +28,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   final TextEditingController _priceController = TextEditingController();
 
   PlatformFile? _selectedVideo;
-  PlatformFile? _selectedCover;
-  
+
   VideoPlayerController? _videoPlayerController;
   bool _isVideoInitialized = false;
 
@@ -54,7 +53,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   // --- GESTION VIDÉO & PRÉVISUALISATION ---
   Future<void> _initializeVideoPlayer() async {
     if (_selectedVideo == null) return;
-    
+
     if (_videoPlayerController != null) {
       await _videoPlayerController!.dispose();
     }
@@ -89,13 +88,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
     }
   }
 
-  Future<void> _pickCover() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
-    if (result != null && result.files.isNotEmpty) {
-      setState(() => _selectedCover = result.files.first);
-    }
-  }
-
   // Simulation ouverture caméra avec filtres beauté
   void _openCameraWithBeautyFilters() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -126,9 +118,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
       }
     }
 
-    setState(() { 
-      _isUploading = true; 
-      _progress = 0.0; 
+    setState(() {
+      _isUploading = true;
+      _progress = 0.0;
     });
 
     try {
@@ -138,16 +130,20 @@ class _CreatePostPageState extends State<CreatePostPage> {
         subtitle: _subtitleController.text.trim().isEmpty ? null : _subtitleController.text.trim(),
         videoUrl: '',
         coverUrl: '',
-        type: _selectedContentType, 
+        type: _selectedContentType,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
-      // Note: Tu peux stocker _isPaid et price dans ta table Supabase si tu as ajouté les colonnes correspondantes.
+      // Note: la couverture n'est plus fournie manuellement — MediaService
+      // doit générer une miniature automatiquement (ex: première frame de
+      // la vidéo côté serveur/RPC) ou laisser coverUrl vide.
+      // Tu peux stocker _isPaid et price dans ta table Supabase si tu as
+      // ajouté les colonnes correspondantes.
       await MediaService().insertWithFiles(
         newContent,
         videoFile: _selectedVideo,
-        coverFile: _selectedCover,
+        coverFile: null,
         onProgress: (p) => setState(() => _progress = p),
       );
 
@@ -337,7 +333,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
                     children: [
                       const Text('Contenu Payant (Verrouillé)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                       Switch(
@@ -367,24 +362,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
               ),
             ),
 
-            const SizedBox(height: 20),
-
-            // 6. COUVERTURE
-            ElevatedButton.icon(
-              onPressed: _pickCover,
-              icon: const Icon(Icons.image_outlined),
-              label: Text(_selectedCover == null ? 'Choisir une image de couverture' : 'Couverture sélectionnée avec succès'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kSurfaceLight,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-
             const SizedBox(height: 30),
 
-            // 7. BOUTON DE PUBLICATION OU PROGRESSION
+            // 6. BOUTON DE PUBLICATION OU PROGRESSION
             if (_isUploading) ...[
               LinearProgressIndicator(value: _progress, color: kRed, backgroundColor: kSurfaceLight),
               const SizedBox(height: 12),
