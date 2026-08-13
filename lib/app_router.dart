@@ -525,6 +525,21 @@ GoRoute(
           final userId = state.pathParameters['userId']!;
           return NoTransitionPage(child: UserProfilePage(userId: userId));
         }),
+        GoRoute(
+  path: 'followers/:uid',
+  builder: (context, state) {
+    final uid = state.pathParameters['uid']!;
+    return FollowersListPage(userId: uid);
+  },
+),
+GoRoute(
+  path: 'following/:uid',
+  builder: (context, state) {
+    final uid = state.pathParameters['uid']!;
+    return FollowingListPage(userId: uid);
+  },
+),
+
         GoRoute(path: AppRoutes.thixInfo, name: 'thixInfo', pageBuilder: (_, __) => const NoTransitionPage(child: ThixInfoHome())),
         GoRoute(path: AppRoutes.thixInfoArticle, name: 'thixInfoArticle', pageBuilder: (_, state) => NoTransitionPage(child: thixInfoArticle.ArticleDetailPage(articleId: state.pathParameters['articleId']!))),
         GoRoute(path: AppRoutes.thixInfoSearch, name: 'thixInfoSearch', pageBuilder: (_, __) => const NoTransitionPage(child: infoSearch.SearchPage())),
