@@ -134,7 +134,8 @@ class _HomeServicesConstellationState extends State<HomeServicesConstellation> w
       _ServiceNodeData(key: 'emplois', icon: Icons.work_rounded, title: l10n.t('serviceEmplois'), color: ThixPolicy.domainJobs, badge: c.jobs),
       _ServiceNodeData(key: 'formations', icon: Icons.school_rounded, title: l10n.t('serviceFormations'), color: ThixPolicy.domainLearning, badge: c.formations),
       _ServiceNodeData(key: 'opportunites', icon: Icons.lightbulb_rounded, title: l10n.t('serviceOpportunites'), color: ThixPolicy.domainOpportunity, badge: c.opportunities),
-      _ServiceNodeData(key: 'thixPro', icon: Icons.groups_rounded, title: l10n.t('serviceReseauPro'), color: ThixPolicy.domainNetwork, badge: c.network),
+      // Remplacement ici : "Thix Pro" au lieu de la localisation par défaut
+      _ServiceNodeData(key: 'reseauPro', icon: Icons.groups_rounded, title: 'Thix Pro', color: ThixPolicy.domainNetwork, badge: c.network),
       
       // --- CATÉGORIE 4 : Vie Pratique & Gouvernement ---
       _ServiceNodeData(key: 'thixSante', icon: Icons.local_hospital_rounded, title: l10n.t('serviceSante'), color: ThixPolicy.domainHealth, badge: c.health),
