@@ -163,7 +163,7 @@ class ConnectionsNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
         await Supabase.instance.client
             .from('connections')
             .delete()
-            .or('and(user1_id.eq.$uid,user2_id.eq.$targetUserId),and(user1_id.eq.$targetUserId,user2_id.eq.$uid)');
+            .or('and(user1_id.eq.${profiles.uid},user2_id.eq.$targetUserId),and(user1_id.eq.$targetUserId,user2_id.eq.${profiles.uid})'); 
       } catch (_) {}
       state = AsyncData(current);
       rethrow;
@@ -410,12 +410,12 @@ class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
             ),
           ),
           const SizedBox(height: 24),
-          const Text(
+           Text(
             'Aucun abonnement',
             style: ThixPolicy.h3Style,
           ),
           const SizedBox(height: 8),
-          const Text(
+           Text(
             'Commencez à suivre des professionnels\nde votre secteur.',
             textAlign: TextAlign.center,
             style: ThixPolicy.bodySmallStyle,
