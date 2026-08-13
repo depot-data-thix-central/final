@@ -966,112 +966,78 @@ class _SummaryRow extends StatelessWidget {
 // ============================================================================
 // WIDGET : DIALOGUE DE PARRAINAGE (QR CODE)
 // ============================================================================
-class QrParrainageDialog extends StatefulWidget {
-  final String email; 
-  final String password;
+class SecureQrParrainageDialog extends StatefulWidget {
+  final String email;
   final String phone;
   final String fullName;
   final String? country;
   final String occupation;
-  final VoidCallback onSuccess; 
+  final VoidCallback onSuccess;
 
-  const QrParrainageDialog({
-    super.key, 
-    required this.email, 
-    required this.password, 
+  const SecureQrParrainageDialog({
+    super.key,
+    required this.email,
     required this.phone,
     required this.fullName,
-    required this.country,
+    this.country,
     required this.occupation,
     required this.onSuccess,
   });
 
   @override
-  State<QrParrainageDialog> createState() => _QrParrainageDialogState();
+  State<SecureQrParrainageDialog> createState() => _SecureQrParrainageDialogState();
 }
 
-class _QrParrainageDialogState extends State<QrParrainageDialog> {
-  String? _activationToken;
-  StreamSubscription? _profileSubscription;
-  bool _isLoadingToken = true;
+class _SecureQrParrainageDialogState extends State<SecureQrParrainageDialog> {
+  late Future<String> _tokenFuture;
+  StreamSubscription? _statusSubscription;
 
   @override
   void initState() {
     super.initState();
-    _initAndListen();
+    _tokenFuture = _generateTokenFromServer();
   }
 
-  Future<void> _initAndListen() async {
+  Future<String> _generateTokenFromServer() async {
     try {
-      final authClient = Supabase.instance.client.auth;
-      var user = authClient.currentUser;
+      // Appel de la procédure stockée sécurisée sur Supabase
+      final response = await Supabase.instance.client.rpc(
+        'generate_qr_activation_token',
+        params: {
+          'p_email': widget.email,
+          'p_phone': widget.phone,
+          'p_full_name': widget.fullName,
+          'p_country': widget.country ?? '',
+          'p_occupation': widget.occupation,
+        },
+      );
 
-      // 1. Création ou connexion silencieuse sans passer par l'OTP
-      if (user == null) {
-        try {
-          final res = await authClient.signUp(
-            email: widget.email, 
-            password: widget.password,
-            data: {'full_name': widget.fullName, 'phone': widget.phone},
-          );
-          user = res.user;
-        } catch (_) {
-          final res = await authClient.signInWithPassword(email: widget.email, password: widget.password);
-          user = res.user;
-        }
-      }
-
-      if (user == null) throw Exception('Impossible d\'initialiser le compte.');
-
-      // 2. Enregistrement automatique du profil brouillon en base de données
-      await Supabase.instance.client.from('profiles').upsert({
-        'id': user.id,
-        'full_name': widget.fullName,
-        'phone_number': widget.phone,
-        'country_or_origin': widget.country,
-        'occupation': widget.occupation,
-        'account_status': 'pending',
-        'registration_status': 'pending',
-      });
-
-      // 3. Génération du token pour le QR Code
-      final token = 'thix_activation_${DateTime.now().millisecondsSinceEpoch}_${user.id.substring(0, 5)}';
+      final token = response.toString();
       
-      await Supabase.instance.client.from('activation_codes').upsert({
-        'user_id': user.id,
-        'token': token,
-        'expires_at': DateTime.now().add(const Duration(minutes: 10)).toIso8601String(),
-      });
-
-      if (mounted) {
-        setState(() {
-          _activationToken = token;
-          _isLoadingToken = false;
+      // Écoute temps réel de l'activation du compte par un parrain
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        _statusSubscription = Supabase.instance.client
+            .from('profiles')
+            .stream(primaryKey: ['id'])
+            .eq('id', userId)
+            .listen((data) {
+          if (data.isNotEmpty && data.first['account_status'] == 'active') {
+            widget.onSuccess();
+            if (mounted) Navigator.pop(context);
+          }
         });
       }
 
-      // 4. Écoute en temps réel de l'activation par le parrain
-      _profileSubscription = Supabase.instance.client
-          .from('profiles')
-          .stream(primaryKey: ['id'])
-          .eq('id', user.id)
-          .listen((data) {
-        if (data.isNotEmpty && (data.first['account_status'] == 'active' || data.first['registration_status'] == 'active')) {
-          widget.onSuccess();
-          if (mounted) Navigator.pop(context); 
-        }
-      });
+      return token;
     } catch (e) {
-      debugPrint('[QrParrainage] Erreur : $e');
-      if (mounted) {
-        setState(() => _isLoadingToken = false);
-      }
+      throw Exception('Erreur de génération sécurisée : $e');
     }
   }
 
   @override
   void dispose() {
-    _profileSubscription?.cancel();
+    _statusSubscription?.cancel();
     super.dispose();
   }
 
@@ -1082,42 +1048,77 @@ class _QrParrainageDialogState extends State<QrParrainageDialog> {
       backgroundColor: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.qr_code_scanner_rounded, color: _AppColors.primary, size: 40),
-            const SizedBox(height: 16),
-            const Text(
-              'Activation par un pair',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _AppColors.primary),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Faites scanner ce code QR par un membre actif de THIX pour valider instantanément votre compte.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _AppColors.textMuted, fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            if (_isLoadingToken || _activationToken == null)
-              const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: _AppColors.primary)))
-            else
-              QrImageView(
-                data: _activationToken!,
-                version: QrVersions.auto,
-                size: 200.0,
-                backgroundColor: Colors.white,
-              ),
-            const SizedBox(height: 16),
-            const Text('Expire dans 10 minutes', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Fermer / Annuler', style: TextStyle(color: _AppColors.textDark, fontWeight: FontWeight.w600)),
-            )
-          ],
+        child: FutureBuilder<String>(
+          future: _tokenFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 250,
+                child: Center(
+                  child: CircularProgressIndicator(color: ThixPolicy.primary),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Erreur : ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Fermer'),
+                  ),
+                ],
+              );
+            }
+
+            final token = snapshot.data!;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.qr_code_scanner_rounded, color: ThixPolicy.primary, size: 40),
+                const SizedBox(height: 16),
+                const Text(
+                  'Activation Sécurisée',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: ThixPolicy.primary),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Faites scanner ce code par un pair accrédité pour valider l\'identité.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: ThixPolicy.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                QrImageView(
+                  data: token,
+                  version: QrVersions.auto,
+                  size: 200.0,
+                  backgroundColor: Colors.white,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Valide pour 15 minutes',
+                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textMain)),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
-
