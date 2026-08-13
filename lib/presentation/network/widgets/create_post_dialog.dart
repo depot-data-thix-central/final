@@ -263,12 +263,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog>
     if (_hasBgColor) setState(() => _selectedBgColor = Colors.transparent);
   }
 
-  /// ─────────────────────────────────────────────────────────────
-  /// ENREGISTREMENT AUDIO — CORRIGÉ
-  /// ─────────────────────────────────────────────────────────────
-  /// Avant : path: '' → crash sur mobile (Android/iOS exigent un
-  /// vrai chemin de fichier pour `record`, contrairement au web).
-  /// ─────────────────────────────────────────────────────────────
   Future<void> _startRecording() async {
     try {
       final hasPermission = await _audioRecorder.hasPermission();
@@ -488,10 +482,15 @@ Réponds : SAFE ou FAKE: [raison]
 
     try {
       final ns = ref.read(networkServiceProvider);
-      final factCheckResult = await _runFactCheck(textContent).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => {'isMisinformation': 'false', 'message': null, 'severity': null},
-      );
+      
+      // Sécurisation du timeout pour ne pas crasher si l'IA est lente
+      Map<String, dynamic>? factCheckResult;
+      try {
+        factCheckResult = await _runFactCheck(textContent).timeout(const Duration(seconds: 10));
+      } catch (e) {
+        debugPrint('Fact-Check Timeout/Error: $e');
+        factCheckResult = {'isMisinformation': 'false', 'message': null, 'severity': null};
+      }
 
       final isMisinfo = factCheckResult['isMisinformation'] == 'true';
       final fcMessage = factCheckResult['message'];
@@ -499,24 +498,36 @@ Réponds : SAFE ou FAKE: [raison]
 
       if (mounted) setState(() => _factCheckStatusLabel = 'Envoi des médias…');
 
+      // Séparation propre des médias pour la base de données
       final allMedia = <String>[];
+      final uploadedImages = <String>[];
+      final uploadedVideos = <String>[];
 
+      // Upload Audio
       if (_audioBytes != null) {
         final url = await ns.uploadAudioBytes(_audioBytes!);
         if (url != null && url.isNotEmpty) allMedia.add(url);
       }
 
+      // Upload Images
       for (final item in _images) {
         final compressed = await compressImageBytes(item.bytes);
         final ext = item.name.split('.').last;
         final url = await ns.uploadImageBytes(compressed, fileExtension: ext, bucket: 'post_images');
-        if (url != null && url.isNotEmpty) allMedia.add(url);
+        if (url != null && url.isNotEmpty) {
+          allMedia.add(url);
+          uploadedImages.add(url); // On ajoute spécifiquement aux images
+        }
       }
 
+      // Upload Vidéos
       for (final item in _videos) {
         final ext = item.name.split('.').last;
         final url = await ns.uploadImageBytes(item.bytes, fileExtension: ext, bucket: 'videos');
-        if (url != null && url.isNotEmpty) allMedia.add(url);
+        if (url != null && url.isNotEmpty) {
+          allMedia.add(url);
+          uploadedVideos.add(url); // On ajoute spécifiquement aux vidéos
+        }
       }
 
       final user = Supabase.instance.client.auth.currentUser;
@@ -546,9 +557,13 @@ Réponds : SAFE ou FAKE: [raison]
         'is_misinformation': isMisinfo,
         'fact_check_message': fcMessage,
         'fact_check_severity': fcSeverity,
-        'image_urls': allMedia,
+        
+        // C'EST ICI LA CORRECTION MAJEURE : On sépare proprement les listes
+        'image_urls': uploadedImages, 
+        'video_urls': uploadedVideos,
         'media_urls': allMedia,
         'media_url': allMedia.isNotEmpty ? allMedia.first : null,
+        
         'community_id': widget.communityId,
         'post_type': 'standard',
       };
@@ -607,7 +622,7 @@ Réponds : SAFE ou FAKE: [raison]
     }
   }
 
-  // ─────────────────────────── UI helpers (design allégé) ───────────────────────────
+  // ─────────────────────────── UI helpers ───────────────────────────
 
   Widget _typeTab(String label, int mode, IconData icon) {
     final sel = _postTypeMode == mode;
