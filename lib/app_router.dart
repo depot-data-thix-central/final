@@ -411,18 +411,7 @@ class AppRouter {
                       GoRoute(path: 'data', name: 'chatData', pageBuilder: (context, state) => const NoTransitionPage(child: ChatDataSettings())),
                     ],
                   ),
-                  GoRoute(
-  path: '/network',
-  builder: (context, state) => const NetworkPage(),
-  routes: [
-    GoRoute(
-      path: 'scanner_activation', 
-      builder: (context, state) => const ScannerActivationScreen(),
-    ),
-  ],
-)
-
-
+                  
                   GoRoute(path: 'escalate/:conversationId', name: 'chatEscalate', pageBuilder: (context, state) {
                     final conversationId = state.pathParameters['conversationId']!;
                     final fromAgentId = state.uri.queryParameters['agentId'] ?? '';
@@ -455,6 +444,11 @@ class AppRouter {
             ]),
           ],
         ),
+
+        GoRoute(
+  path: '/scanner_activation',
+  builder: (context, state) => const ScannerActivationScreen(),
+), 
 
         GoRoute(path: '/connections', name: 'connections', pageBuilder: (context, state) => const NoTransitionPage(child: ConnectionsPage())),
         GoRoute(path: AppRoutes.callIncoming, name: AppRoutes.callIncomingName, builder: (c, s) => IncomingCallPage(invite: s.extra as CallInvite)),
