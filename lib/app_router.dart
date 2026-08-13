@@ -412,9 +412,16 @@ class AppRouter {
                     ],
                   ),
                   GoRoute(
-  path: 'scanner_activation',
-  builder: (context, state) => const ScannerActivationScreen(),
-),
+  path: '/network',
+  builder: (context, state) => const NetworkPage(),
+  routes: [
+    GoRoute(
+      path: 'scanner_activation', 
+      builder: (context, state) => const ScannerActivationScreen(),
+    ),
+  ],
+)
+
 
                   GoRoute(path: 'escalate/:conversationId', name: 'chatEscalate', pageBuilder: (context, state) {
                     final conversationId = state.pathParameters['conversationId']!;
