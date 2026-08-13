@@ -233,7 +233,7 @@ class LessonProgressNotifier extends AutoDisposeFamilyNotifier<LessonProgressSta
       debugPrint('Erreur de synchronisation globale : $e');
     }
   }
-
+}
 // ============================================================
 // WIDGET UI (ConsumerWidget)
 // ============================================================
