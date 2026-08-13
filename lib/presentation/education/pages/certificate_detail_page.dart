@@ -89,7 +89,7 @@ class _CertificateDetailPageState extends State<CertificateDetailPage> {
         _formation?['certificate_signatory_title'] as String? ?? '';
 
     final dateStr =
-        '\( {c.issuedAt.day.toString().padLeft(2, '0')}/ \){c.issuedAt.month.toString().padLeft(2, '0')}/${c.issuedAt.year}';
+        '${c.issuedAt.day.toString().padLeft(2, '0')}/${c.issuedAt.month.toString().padLeft(2, '0')}/${c.issuedAt.year}';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
