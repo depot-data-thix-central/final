@@ -381,6 +381,14 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
       _snack('Veuillez définir un mot de passe (min. 8 caractères).', isError: true);
       return;
     }
+    if (phone.isEmpty) {
+      _snack('Veuillez saisir votre numéro de mobile.', isError: true);
+      return;
+    }
+
+    // On s'assure que le compte Auth est créé dans Supabase avant d'ouvrir le QR
+    final success = await _createAuthUser();
+    if (!success) return;
 
     if (!mounted) return;
     
@@ -399,6 +407,7 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
       ),
     );
   }
+
 
 
     // Factorisation de la finalisation pour l'OTP et le Parrainage
