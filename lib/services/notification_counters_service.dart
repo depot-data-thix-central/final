@@ -124,7 +124,7 @@ class NotificationCountersService {
   static const _mediaTable = 'reels';                 // TDIA / Media
 
   String _prefKey(String uid, ThixSection section) =>
-      'last_seen_\( {uid}_ \){section.name}';
+    'last_seen_\( {uid}_ \){section.name}';
 
   Future<DateTime?> _getLastSeen(String uid, ThixSection section) async {
     try {
