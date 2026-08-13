@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/features/network/data/network_service_provider.dart';
 import 'package:thix_id/models/network_post.dart';
+import 'package:flutter/foundation.dart';
 
 final userProfileProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, userId) async {
   final service = ref.read(networkServiceProvider);
