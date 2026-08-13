@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'package:thix_id/presentation/education/services/certificate_service.dart';
 import 'package:thix_id/presentation/education/models/lesson.dart';
 import 'formation_video_player.dart';
 import 'formation_evaluation_widget.dart';
@@ -174,53 +174,65 @@ class LessonProgressNotifier extends AutoDisposeFamilyNotifier<LessonProgressSta
   Future<void> _syncEnrollmentProgress(String userId, String formationId) async {
     try {
       final supabase = Supabase.instance.client;
-      
-      // A. Récupérer toutes les leçons du cours
-      final formationData = await supabase.from('formations')
+
+      final formationData = await supabase
+          .from('formations')
           .select('modules(lessons(id))')
-          .eq('id', formationId).maybeSingle();
+          .eq('id', formationId)
+          .maybeSingle();
 
       if (formationData == null) return;
 
       int totalLessons = 0;
-      List<String> courseLessonIds = [];
-      
-      for (var module in formationData['modules'] ?? []) {
-        for (var lesson in module['lessons'] ?? []) {
+      final courseLessonIds = <String>[];
+
+      for (final module in formationData['modules'] ?? []) {
+        for (final lesson in module['lessons'] ?? []) {
           totalLessons++;
-          courseLessonIds.add(lesson['id']);
+          courseLessonIds.add(lesson['id'].toString());
         }
       }
 
       if (totalLessons == 0) return;
 
-      // B. Récupérer les leçons terminées par cet utilisateur
-      final completedData = await supabase.from('user_progress')
+      final completedData = await supabase
+          .from('user_progress')
           .select('lesson_id')
           .eq('user_id', userId)
           .eq('status', 'completed');
 
-      // C. Calculer la progression exacte
       int completedCount = 0;
-      for(var row in (completedData as List)) {
-        if (courseLessonIds.contains(row['lesson_id'])) {
+      for (final row in (completedData as List)) {
+        if (courseLessonIds.contains(row['lesson_id'].toString())) {
           completedCount++;
         }
       }
 
       final double overallProgress = completedCount / totalLessons;
 
-      // D. Mettre à jour l'inscription globale (c'est ce qui est affiché dans Mes Cours)
       await supabase.from('enrollments').update({
         'progress': overallProgress,
         'status': overallProgress >= 1.0 ? 'completed' : 'in_progress',
       }).eq('uid', userId).eq('formation_id', formationId);
-      
+
+      // ✅ Certificat auto à 100 %
+      if (overallProgress >= 1.0) {
+        try {
+          final cert = await CertificateService.instance.issueIfNeeded(
+            userId: userId,
+            formationId: formationId,
+          );
+          if (cert != null) {
+            debugPrint('📜 Certificat émis : ${cert.verificationHash}');
+          }
+        } catch (e) {
+          debugPrint('Certificat non émis : $e');
+        }
+      }
     } catch (e) {
       debugPrint('Erreur de synchronisation globale : $e');
     }
   }
-}
 
 // ============================================================
 // WIDGET UI (ConsumerWidget)
