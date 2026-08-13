@@ -21,6 +21,7 @@ import 'package:thix_id/presentation/education/models/certificate.dart';
 import 'package:thix_id/presentation/education/widgets/formation_detail/formation_lesson_player.dart';
 import 'screens/author_library_page.dart'; // Le bon chemin relatif
 import 'models/book.dart'; // Pour que le compilateur reconnaisse le type "Book"
+import 'package:thix_id/presentation/education/pages/certificate_verify_page.dart';
 
 // Formateur
 import 'package:thix_id/presentation/education/instructor/dashboard/instructor_dashboard.dart';
@@ -65,6 +66,16 @@ List<GoRoute> educationRoutes = [
             const NoTransitionPage(child: EducationCertificates()),
       ),
 
+      GoRoute(
+  path: '/verify/:hash',
+  name: 'certificateVerify',
+  pageBuilder: (context, state) {
+    final hash = state.pathParameters['hash'] ?? '';
+    return NoTransitionPage(
+      child: CertificateVerifyPage(hash: hash),
+    );
+  },
+),
       GoRoute(
   path: '/education/library/author',
   name: 'libraryAuthor',
