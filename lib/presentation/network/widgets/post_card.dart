@@ -25,7 +25,7 @@ String _formatCountHelper(int count) {
   return '$count';
 }
 
-// ─── HELPER : DÉTECTION VIDÉO PAR EXTENSION ───
+// ─── HELPER : DÉTECTION VIDÉO PAR EXTENSION ET MOT-CLÉ ───
 bool _isVideoUrl(String url) {
   final lower = url.toLowerCase();
   return lower.contains('.mp4') ||
@@ -33,7 +33,9 @@ bool _isVideoUrl(String url) {
       lower.contains('.m4v') ||
       lower.contains('.webm') ||
       lower.contains('.avi') ||
-      lower.contains('.mkv');
+      lower.contains('.mkv') ||
+      lower.contains('/videos/') ||
+      lower.contains('/video/');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -586,7 +588,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
     );
   }
 
-  // ── FACT-CHECK IA — repositionné en bas de carte, design amélioré ──
+  // ── FACT-CHECK IA ──
   Widget _buildFactCheckBanner(bool isMisinformation, String? message) {
     if (!isMisinformation || message == null || message.isEmpty) return const SizedBox.shrink();
     return Container(
@@ -845,9 +847,11 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                       ],
 
                       // ─── MÉDIAS MIXTES : photos + vidéos ensemble ───
-                      if (!post.isRepostCard && post.imageUrls.isNotEmpty) ...[
+                      // CORRECTION MAJEURE ICI : on vérifie `hasImages` OU `hasVideos`
+                      // et on donne une liste combinée à la grille.
+                      if (!post.isRepostCard && (post.hasImages || post.hasVideos)) ...[
                         const SizedBox(height: 10),
-                        _buildMediaGrid(post.imageUrls),
+                        _buildMediaGrid([...post.imageUrls, ...post.videoUrls]),
                       ],
 
                       // ─── AUDIO — peut coexister avec texte/photos ───
@@ -865,7 +869,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                         _buildChallengeWidget(post),
                       ],
 
-                      // ─── FACT-CHECK — désormais en bas, juste avant les actions ───
+                      // ─── FACT-CHECK ───
                       _buildFactCheckBanner(post.isMisinformation, post.factCheckMessage),
 
                       const SizedBox(height: ThixPolicy.s12),
@@ -970,6 +974,9 @@ class _OriginalPostEmbed extends ConsumerWidget {
           );
         }
 
+        // CORRECTION MAJEURE ICI AUSSI pour les posts repostés
+        final originalMedia = [...original.imageUrls, ...original.videoUrls];
+
         return Container(
           decoration: BoxDecoration(color: ThixPolicy.surfaceSoft, borderRadius: BorderRadius.circular(ThixPolicy.rLg), border: Border.all(color: ThixPolicy.border)),
           clipBehavior: Clip.antiAlias,
@@ -998,14 +1005,14 @@ class _OriginalPostEmbed extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(original.content, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, height: 1.35, color: ThixPolicy.textMain)),
                     ],
-                    if (original.imageUrls.isNotEmpty) ...[
+                    if (originalMedia.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(ThixPolicy.rMd),
-                        child: _isVideoUrl(original.imageUrls.first)
-                            ? _VideoThumbTile(videoUrl: original.imageUrls.first, height: 140, onTap: () {})
+                        child: _isVideoUrl(originalMedia.first)
+                            ? _VideoThumbTile(videoUrl: originalMedia.first, height: 140, onTap: () {})
                             : CachedNetworkImage(
-                                imageUrl: original.imageUrls.first, height: 140, width: double.infinity, fit: BoxFit.cover,
+                                imageUrl: originalMedia.first, height: 140, width: double.infinity, fit: BoxFit.cover,
                                 errorWidget: (_, __, ___) => const SizedBox.shrink(),
                               ),
                       ),
@@ -1099,9 +1106,7 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TUILE VIDÉO (dans la grille de médias) — thumbnail + play, corrige
-// l'ancien bug où les URLs vidéo étaient traitées comme des images
-// (affichage d'une icône "image cassée").
+// TUILE VIDÉO
 // ─────────────────────────────────────────────────────────────
 class _VideoThumbTile extends StatefulWidget {
   final String videoUrl;
@@ -1229,8 +1234,7 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// LECTEUR AUDIO — refonte : monochrome (sans or), plus grand,
-// ondulation plus fine et plus fluide.
+// LECTEUR AUDIO 
 // ─────────────────────────────────────────────────────────────
 class _ThixWaveformAudioPlayer extends StatefulWidget {
   final String audioUrl;
@@ -1244,8 +1248,6 @@ class _ThixWaveformAudioPlayerState extends State<_ThixWaveformAudioPlayer> {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
-  // Motif d'ondulation plus naturel — davantage de points, variation plus
-  // douce pour un rendu "waveform" fluide plutôt que des barres aléatoires.
   static final List<double> _wavePattern = List.generate(48, (i) {
     final base = 0.35 + 0.55 * (0.5 + 0.5 * _sinApprox(i / 48 * 6.28));
     final micro = (i % 5 == 0) ? 0.12 : 0.0;
@@ -1253,12 +1255,10 @@ class _ThixWaveformAudioPlayerState extends State<_ThixWaveformAudioPlayer> {
   });
 
   static double _sinApprox(double x) {
-    // approximation simple sans dart:math import supplémentaire nécessaire
     return _sin(x);
   }
 
   static double _sin(double x) {
-    // Taylor series basique — suffisant pour générer un motif visuel varié.
     final x2 = x * x;
     return x - (x * x2) / 6 + (x * x2 * x2) / 120 - (x * x2 * x2 * x2) / 5040;
   }
