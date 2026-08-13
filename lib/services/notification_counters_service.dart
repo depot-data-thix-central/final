@@ -165,18 +165,52 @@ class NotificationCountersService {
 
   Future<int> _countMessagesSince(String uid, DateTime? since) async {
     try {
-      var query = _client
+      // A. Direct receiver_id
+      var q = _client
           .from(_messagesTable)
           .select('id')
           .eq('receiver_id', uid)
-          .eq('is_read', false);
+          .eq('is_read', false)
+          .eq('is_deleted', false);
 
       if (since != null) {
-        query = query.gt('created_at', since.toIso8601String());
+        q = q.gt('created_at', since.toIso8601String());
       }
-      final response = await query;
-      return response is List ? response.length : 0;
+
+      final res = await q;
+      final direct = res is List ? res.length : 0;
+      if (direct > 0) return direct;
+
+      // B. Fallback : messages dans mes conversations, pas envoyés par moi, non lus
+      final conv = await _client
+          .from('conversation_members') // adapte le nom si besoin
+          .select('conversation_id')
+          .eq('user_id', uid);
+
+      if (conv is! List || conv.isEmpty) return 0;
+
+      final ids = conv
+          .map((e) => e['conversation_id']?.toString())
+          .whereType<String>()
+          .toList();
+      if (ids.isEmpty) return 0;
+
+      var q2 = _client
+          .from(_messagesTable)
+          .select('id')
+          .inFilter('conversation_id', ids)
+          .neq('sender_id', uid)
+          .eq('is_read', false)
+          .eq('is_deleted', false);
+
+      if (since != null) {
+        q2 = q2.gt('created_at', since.toIso8601String());
+      }
+
+      final res2 = await q2;
+      return res2 is List ? res2.length : 0;
     } catch (e) {
+      debugPrint('countMessages error: $e');
       return 0;
     }
   }
