@@ -12,8 +12,6 @@ import 'package:thix_id/features/auth/presentation/providers/auth_controller.dar
 // ✅ Intégration du Design System THIX v1
 import 'package:thix_id/core/theme/thix_design_policy.dart';
 
-typedef PhoneAuthSession = dynamic;
-
 // ---------------------------------------------------------------------------
 // Page de connexion principale
 // ---------------------------------------------------------------------------
@@ -28,7 +26,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _identifierC = TextEditingController();
   final _passwordC = TextEditingController();
   bool _rememberMe = true;
-  PhoneAuthSession? _phoneSession;
 
   // ---------- Anti brute-force (soft lockout) ----------
   int _failedAttempts = 0;
@@ -43,20 +40,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   static const int _resetCooldownDuration = 45;
 
   @override
-  void initState() {
-    super.initState();
-    _identifierC.addListener(_onIdentifierChanged);
-  }
-
-  void _onIdentifierChanged() {
-    if (_phoneSession != null) {
-      setState(() => _phoneSession = null);
-    }
-  }
-
-  @override
   void dispose() {
-    _identifierC.removeListener(_onIdentifierChanged);
     _identifierC.dispose();
     _passwordC.dispose();
     _lockoutTimer?.cancel();
@@ -79,8 +63,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   String _userFacingError(Object e) {
     if (kDebugMode) debugPrint('[Login] erreur brute: $e');
+    final msg = e.toString().toLowerCase();
+    
+    if (msg.contains('aucun compte trouvé')) {
+      return 'Aucun compte trouvé avec ce numéro de téléphone.';
+    }
     if (e is AuthException) {
-      final msg = e.message.toLowerCase();
       if (msg.contains('rate limit') || msg.contains('too many')) {
         return 'Trop de tentatives. Merci de patienter quelques instants.';
       }
@@ -89,7 +77,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       }
       return 'Identifiant ou mot de passe incorrect.';
     }
-    return 'Une erreur est survenue. Vérifiez vos identifiants et réessayez.';
+    return 'Identifiant ou mot de passe incorrect.';
   }
 
   void _startLockoutTimer() {
@@ -117,6 +105,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     final identifier = _identifierC.text.trim();
     final password = _passwordC.text;
+    
     if (identifier.isEmpty || password.isEmpty) {
       _snack('Veuillez saisir votre identifiant et mot de passe.', isError: true);
       return;
@@ -125,26 +114,29 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final authNotifier = ref.read(authControllerProvider.notifier);
 
     try {
+      String finalIdentifier = identifier;
+
+      // 🌟 NOUVEAU : Si ça ressemble à un numéro de mobile, on cherche l'email associé
       if (_looksLikePhone(identifier) && !identifier.contains('@')) {
-        if (kIsWeb) {
-          _snack('Connexion par SMS non disponible dans la Preview web.', isError: true);
-          return;
+        final response = await Supabase.instance.client
+            .from('profiles')
+            .select('email')
+            .eq('phone_number', identifier)
+            .maybeSingle();
+            
+        if (response != null && response['email'] != null) {
+          finalIdentifier = response['email'] as String;
+        } else {
+          throw Exception('Aucun compte trouvé avec ce numéro de téléphone.');
         }
-        if (_phoneSession == null) {
-          final session = await authNotifier.startPhoneAuth(phoneNumber: identifier);
-          if (!mounted) return;
-          setState(() => _phoneSession = session);
-          _snack('SMS envoyé. Entrez le code reçu ci-dessous puis validez.');
-          return;
-        }
-        await authNotifier.confirmPhoneCode(session: _phoneSession!, smsCode: password);
-      } else {
-        await authNotifier.signIn(
-          identifier: identifier,
-          password: password,
-          rememberMe: _rememberMe,
-        );
       }
+
+      // Connexion standard (Email résolu ou THIX ID + Mot de passe)
+      await authNotifier.signIn(
+        identifier: finalIdentifier,
+        password: password,
+        rememberMe: _rememberMe,
+      );
 
       if (!mounted) return;
       
@@ -394,7 +386,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final inPhoneCodeMode = _phoneSession != null;
     final authState = ref.watch(authControllerProvider);
     final isLoading = authState.isLoading;
 
@@ -416,7 +407,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Image.asset(
-                      'assets/images/thix_id_logo.png', // Assurez-vous du chemin correct de votre logo
+                      'assets/images/thix_id_logo.png',
                       height: 55,
                       fit: BoxFit.contain,
                       errorBuilder: (context, error, stackTrace) {
@@ -461,15 +452,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(height: ThixPolicy.s28),
                           
                           _SecureInput(
-                            key: const ValueKey('identifier'), label: 'Identifiant THIX ID ou Email', hint: 'Ex: TX-882-091 ou email', icon: Icons.badge_outlined, isPassword: false, type: TextInputType.text, controller: _identifierC, textInputAction: TextInputAction.next,
+                            key: const ValueKey('identifier'), 
+                            label: 'Email, Mobile ou THIX ID', 
+                            hint: 'Ex: votre@email.com ou +243...', 
+                            icon: Icons.badge_outlined, 
+                            isPassword: false, 
+                            type: TextInputType.text, 
+                            controller: _identifierC, 
+                            textInputAction: TextInputAction.next,
                           ),
                           const SizedBox(height: ThixPolicy.s16),
                           _SecureInput(
-                            key: ValueKey(inPhoneCodeMode ? 'sms_code' : 'password'), label: inPhoneCodeMode ? 'Code SMS reçu' : 'Mot de passe', hint: inPhoneCodeMode ? '123456' : '••••••••••••', icon: inPhoneCodeMode ? Icons.sms_outlined : Icons.lock_outline_rounded, isPassword: !inPhoneCodeMode, type: inPhoneCodeMode ? TextInputType.number : TextInputType.text, controller: _passwordC, textInputAction: TextInputAction.done,
+                            key: const ValueKey('password'), 
+                            label: 'Mot de passe', 
+                            hint: '••••••••••••', 
+                            icon: Icons.lock_outline_rounded, 
+                            isPassword: true, 
+                            type: TextInputType.text, 
+                            controller: _passwordC, 
+                            textInputAction: TextInputAction.done,
                           ),
-                          
-                          if (inPhoneCodeMode)
-                            Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => setState(() { _phoneSession = null; _passwordC.clear(); }), child: const Text('Changer de numéro', style: TextStyle(color: ThixPolicy.primary, fontWeight: FontWeight.w600)))),
                           
                           const SizedBox(height: ThixPolicy.s12),
                           Row(
