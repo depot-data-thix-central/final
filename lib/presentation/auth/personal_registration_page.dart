@@ -368,32 +368,35 @@ class _PersonalRegistrationPageState extends ConsumerState<PersonalRegistrationP
   }
 
   // 🌟 NOUVEAU : Logique d'affichage du QR Code de parrainage
-  Future<void> _showQrParrainageDialog() async {
-    final isLoading = ref.read(authControllerProvider).isLoading;
-    if (isLoading) return;
+    Future<void> _showQrParrainageDialog() async {
+    final email = _emailC.text.trim().toLowerCase();
+    final password = _passwordC.text;
+    final phone = _phoneC.text.trim();
 
-    // On s'assure que le compte Supabase Auth est créé pour générer le token
-    if (!_otpSent) {
-      final success = await _createAuthUser();
-      if (!success) return; 
-      setState(() => _otpSent = true);
+    // Vérifications de base des champs du compte
+    if (email.isEmpty || !_isValidEmail(email)) {
+      _snack('Veuillez d\'abord saisir une adresse email valide.', isError: true);
+      return;
     }
-
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUserId == null) {
-      _snack('Erreur lors de la création de l\'identifiant.', isError: true);
+    if (password.length < 8) {
+      _snack('Veuillez définir un mot de passe (min. 8 caractères).', isError: true);
       return;
     }
 
     if (!mounted) return;
     
+    // Ouvre directement le dialogue du QR Code sans envoyer d'OTP
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => QrParrainageDialog(
-        userId: currentUserId,
+        email: email,
+        password: password,
+        phone: phone,
+        fullName: _nameC.text.trim(),
+        country: _country,
+        occupation: _occupationC.text.trim(),
         onSuccess: () {
-          // Le parrain a scanné, on passe directement à la création finale
           _completeRegistration(isParrainage: true);
         },
       ),
@@ -964,10 +967,24 @@ class _SummaryRow extends StatelessWidget {
 // WIDGET : DIALOGUE DE PARRAINAGE (QR CODE)
 // ============================================================================
 class QrParrainageDialog extends StatefulWidget {
-  final String userId; 
+  final String email; 
+  final String password;
+  final String phone;
+  final String fullName;
+  final String? country;
+  final String occupation;
   final VoidCallback onSuccess; 
 
-  const QrParrainageDialog({super.key, required this.userId, required this.onSuccess});
+  const QrParrainageDialog({
+    super.key, 
+    required this.email, 
+    required this.password, 
+    required this.phone,
+    required this.fullName,
+    required this.country,
+    required this.occupation,
+    required this.onSuccess,
+  });
 
   @override
   State<QrParrainageDialog> createState() => _QrParrainageDialogState();
@@ -976,34 +993,80 @@ class QrParrainageDialog extends StatefulWidget {
 class _QrParrainageDialogState extends State<QrParrainageDialog> {
   String? _activationToken;
   StreamSubscription? _profileSubscription;
+  bool _isLoadingToken = true;
 
   @override
   void initState() {
     super.initState();
-    _generateTokenAndListen();
+    _initAndListen();
   }
 
-  Future<void> _generateTokenAndListen() async {
-    final token = 'thix_activation_${DateTime.now().millisecondsSinceEpoch}_${widget.userId.substring(0, 5)}';
-    
-    await Supabase.instance.client.from('activation_codes').upsert({
-      'user_id': widget.userId,
-      'token': token,
-      'expires_at': DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
-    });
+  Future<void> _initAndListen() async {
+    try {
+      final authClient = Supabase.instance.client.auth;
+      var user = authClient.currentUser;
 
-    if (mounted) setState(() => _activationToken = token);
-
-    _profileSubscription = Supabase.instance.client
-        .from('profiles')
-        .stream(primaryKey: ['id'])
-        .eq('id', widget.userId)
-        .listen((data) {
-      if (data.isNotEmpty && data.first['registration_status'] == 'active') {
-        widget.onSuccess();
-        if (mounted) Navigator.pop(context); 
+      // 1. Création ou connexion silencieuse sans passer par l'OTP
+      if (user == null) {
+        try {
+          final res = await authClient.signUp(
+            email: widget.email, 
+            password: widget.password,
+            data: {'full_name': widget.fullName, 'phone': widget.phone},
+          );
+          user = res.user;
+        } catch (_) {
+          final res = await authClient.signInWithPassword(email: widget.email, password: widget.password);
+          user = res.user;
+        }
       }
-    });
+
+      if (user == null) throw Exception('Impossible d\'initialiser le compte.');
+
+      // 2. Enregistrement automatique du profil brouillon en base de données
+      await Supabase.instance.client.from('profiles').upsert({
+        'id': user.id,
+        'full_name': widget.fullName,
+        'phone_number': widget.phone,
+        'country_or_origin': widget.country,
+        'occupation': widget.occupation,
+        'account_status': 'pending',
+        'registration_status': 'pending',
+      });
+
+      // 3. Génération du token pour le QR Code
+      final token = 'thix_activation_${DateTime.now().millisecondsSinceEpoch}_${user.id.substring(0, 5)}';
+      
+      await Supabase.instance.client.from('activation_codes').upsert({
+        'user_id': user.id,
+        'token': token,
+        'expires_at': DateTime.now().add(const Duration(minutes: 10)).toIso8601String(),
+      });
+
+      if (mounted) {
+        setState(() {
+          _activationToken = token;
+          _isLoadingToken = false;
+        });
+      }
+
+      // 4. Écoute en temps réel de l'activation par le parrain
+      _profileSubscription = Supabase.instance.client
+          .from('profiles')
+          .stream(primaryKey: ['id'])
+          .eq('id', user.id)
+          .listen((data) {
+        if (data.isNotEmpty && (data.first['account_status'] == 'active' || data.first['registration_status'] == 'active')) {
+          widget.onSuccess();
+          if (mounted) Navigator.pop(context); 
+        }
+      });
+    } catch (e) {
+      debugPrint('[QrParrainage] Erreur : $e');
+      if (mounted) {
+        setState(() => _isLoadingToken = false);
+      }
+    }
   }
 
   @override
@@ -1030,12 +1093,12 @@ class _QrParrainageDialogState extends State<QrParrainageDialog> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Demandez à un membre vérifié de THIX de scanner ce code depuis son accueil pour activer votre compte instantanément.',
+              'Faites scanner ce code QR par un membre actif de THIX pour valider instantanément votre compte.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _AppColors.textMuted, fontSize: 13),
             ),
             const SizedBox(height: 24),
-            if (_activationToken == null)
+            if (_isLoadingToken || _activationToken == null)
               const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: _AppColors.primary)))
             else
               QrImageView(
@@ -1045,11 +1108,11 @@ class _QrParrainageDialogState extends State<QrParrainageDialog> {
                 backgroundColor: Colors.white,
               ),
             const SizedBox(height: 16),
-            const Text('Expire dans 5 minutes', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+            const Text('Expire dans 10 minutes', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Annuler et utiliser l\'OTP', style: TextStyle(color: _AppColors.textDark, fontWeight: FontWeight.w600)),
+              child: const Text('Fermer / Annuler', style: TextStyle(color: _AppColors.textDark, fontWeight: FontWeight.w600)),
             )
           ],
         ),
@@ -1057,3 +1120,4 @@ class _QrParrainageDialogState extends State<QrParrainageDialog> {
     );
   }
 }
+
