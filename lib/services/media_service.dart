@@ -1,334 +1,435 @@
-import 'dart:async';
-import 'dart:typed_data';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+// lib/presentation/network/pages/connections_list_page.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:thix_id/models/media_content.dart';
-import 'package:uuid/uuid.dart';
-import 'package:path/path.dart' as p;
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:thix_id/presentation/network/widgets/connection_card.dart';
+import 'package:thix_id/core/theme/thix_design_policy.dart';
 
-typedef ProgressCallback = void Function(double progress);
+// ─────────────────────────────────────────────────────────────
+// PROVIDER
+// ─────────────────────────────────────────────────────────────
+final connectionsProvider =
+    AsyncNotifierProvider<ConnectionsNotifier, List<Map<String, dynamic>>>(
+  ConnectionsNotifier.new,
+);
 
-class FeedPage {
-  final List<MediaContent> items;
-  final List<Map<String, dynamic>> raw;
-  FeedPage({required this.items, required this.raw});
-}
+class ConnectionsNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
+  static const _limit = 30;
+  int _offset = 0;
+  bool _hasMore = true;
+  bool get hasMore => _hasMore;
+  String _search = '';
 
-class MediaService {
-  static final MediaService _instance = MediaService._internal();
-  factory MediaService({SupabaseClient? client, String? bucket}) => _instance;
-  MediaService._internal();
-
-  SupabaseClient get supabase => Supabase.instance.client;
-  final Uuid _uuid = const Uuid();
-
-  // ---- BATCH VUES ----
-  static final Set<String> _pendingViews = {};
-  static Timer? _viewTimer;
-
-  void registerView(String id) {
-    _pendingViews.add(id);
-    _viewTimer ??= Timer(const Duration(seconds: 8), _flush);
+  @override
+  Future<List<Map<String, dynamic>>> build() async {
+    _offset = 0;
+    _hasMore = true;
+    return _fetch(0);
   }
 
-  static Future<void> _flush() async {
-    if (_pendingViews.isEmpty) {
-      _viewTimer = null;
+  Future<List<Map<String, dynamic>>> _fetch(int offset) async {
+    final supa = Supabase.instance.client;
+    final userId = supa.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    try {
+      // ✅ Table follows (je suis → following_id)
+      final res = await supa
+          .from('follows')
+          .select('''
+            created_at,
+            following_id,
+            following:profiles!follows_following_id_fkey(
+              id, display_name, avatar_url, photo_url, profession, bio
+            )
+          ''')
+          .eq('follower_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + _limit - 1);
+
+      final list = <Map<String, dynamic>>[];
+
+      for (final row in (res as List)) {
+        final profile = row['following'] as Map<String, dynamic>?;
+        if (profile == null) continue;
+
+        list.add({
+          'id': profile['id'], // on utilise l'id du profil comme clé
+          'user_id': profile['id'],
+          'display_name': profile['display_name'] ?? 'Utilisateur',
+          'photo_url': profile['avatar_url'] ?? profile['photo_url'],
+          'profession': profile['profession'] ?? 'Membre THIX',
+          'bio': profile['bio'],
+          'connected_at': row['created_at'],
+        });
+      }
+
+      if (_search.isNotEmpty) {
+        final q = _search.toLowerCase();
+        return list
+            .where((c) =>
+                (c['display_name'] as String).toLowerCase().contains(q))
+            .toList();
+      }
+
+      return list;
+    } catch (e) {
+      debugPrint('connectionsProvider error: $e');
+
+      // Fallback : ancienne table connections
+      try {
+        final res = await supa
+            .from('connections')
+            .select('''
+              id, created_at, user1_id, user2_id,
+              user1:profiles!user1_id(id, display_name, avatar_url, photo_url, profession, bio),
+              user2:profiles!user2_id(id, display_name, avatar_url, photo_url, profession, bio)
+            ''')
+            .or('user1_id.eq.$userId,user2_id.eq.$userId')
+            .order('created_at', ascending: false)
+            .range(offset, offset + _limit - 1);
+
+        final list = <Map<String, dynamic>>[];
+        for (final conn in (res as List)) {
+          final isUser1 = conn['user1_id'] == userId;
+          final userData = isUser1 ? conn['user2'] : conn['user1'];
+          if (userData == null) continue;
+
+          list.add({
+            'id': conn['id'],
+            'user_id': userData['id'],
+            'display_name': userData['display_name'] ?? 'Utilisateur',
+            'photo_url': userData['avatar_url'] ?? userData['photo_url'],
+            'profession': userData['profession'] ?? 'Membre THIX',
+            'bio': userData['bio'],
+            'connected_at': conn['created_at'],
+          });
+        }
+        return list;
+      } catch (e2) {
+        debugPrint('connectionsProvider fallback error: $e2');
+        return [];
+      }
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (!_hasMore) return;
+    final current = state.valueOrNull ?? <Map<String, dynamic>>[];
+    final more = await _fetch(_offset + _limit);
+    if (more.isEmpty) {
+      _hasMore = false;
       return;
     }
-    final b = _pendingViews.toList();
-    _pendingViews.clear();
-    _viewTimer = null;
-    try {
-      await Supabase.instance.client.rpc('batch_register_views', params: {'p_media_ids': b});
-    } catch (_) {
-      _pendingViews.addAll(b);
-    }
+    _offset += _limit;
+    _hasMore = more.length >= _limit;
+    state = AsyncData([...current, ...more]);
   }
 
-  // ---- FEED ENRICHI ----
-  Future<FeedPage> fetchEnrichedFeed({required List<String> seenIds, int limit = 12}) async {
-    try {
-      final uid = supabase.auth.currentUser?.id;
-      final data = await supabase.rpc('get_feed_with_creator', params: {'p_seen_ids': seenIds, 'p_limit': limit, 'p_uid': uid}) as List;
-      final items = data.map((e) => MediaContent.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-      final raw = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      return FeedPage(items: items, raw: raw);
-    } catch (_) {
-      return FeedPage(items: [], raw: []);
-    }
+  void search(String q) {
+    _search = q;
+    ref.invalidateSelf();
   }
 
-  Future<FeedPage> fetchShuffledFeed({required List<String> seenIds, int limit = 12}) async {
+  Future<void> removeConnection(String targetUserId) async {
+    final current = [...state.valueOrNull ?? <Map<String, dynamic>>[]];
+    final filtered =
+        current.where((c) => c['user_id'] != targetUserId).toList();
+    state = AsyncData(filtered);
+
     try {
-      final data = await supabase.rpc('get_shuffled_feed', params: {'p_seen_ids': seenIds, 'p_limit': limit}) as List;
-      return FeedPage(items: data.map((e) => MediaContent.fromJson(e as Map<String, dynamic>)).toList(), raw: []);
-    } catch (_) {
-      return FeedPage(items: [], raw: []);
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+
+      // ✅ Unfollow via table follows
+      await Supabase.instance.client
+          .from('follows')
+          .delete()
+          .eq('follower_id', uid)
+          .eq('following_id', targetUserId);
+    } catch (e) {
+      // Fallback ancienne table
+      try {
+        await Supabase.instance.client
+            .from('connections')
+            .delete()
+            .eq('id', targetUserId);
+      } catch (_) {}
+      state = AsyncData(current);
+      rethrow;
     }
   }
+}
 
-  // ---- LIKES / FOLLOW ----
-  Future<bool> toggleLike(String id) async {
-    try {
-      final r = await supabase.rpc('toggle_media_like', params: {'p_media_id': id});
-      if (r is bool) return r;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+// ─────────────────────────────────────────────────────────────
+// PAGE
+// ─────────────────────────────────────────────────────────────
+class ConnectionsListPage extends ConsumerStatefulWidget {
+  const ConnectionsListPage({super.key});
 
-  Future<bool> toggleFollow(String targetId) async {
-    final uid = supabase.auth.currentUser?.id;
-    if (uid == null || targetId.isEmpty || uid == targetId) return false;
+  @override
+  ConsumerState<ConnectionsListPage> createState() =>
+      _ConnectionsListPageState();
+}
 
-    try {
-      final ex = await supabase.from('follows').select().eq('follower_id', uid).eq('following_id', targetId).maybeSingle();
-      if (ex != null) {
-        await supabase.from('follows').delete().eq('follower_id', uid).eq('following_id', targetId);
-        return false;
-      } else {
-        await supabase.from('follows').insert({'follower_id': uid, 'following_id': targetId});
-        return true;
+class _ConnectionsListPageState extends ConsumerState<ConnectionsListPage> {
+  final _scroll = ScrollController();
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      if (_scroll.position.pixels >=
+          _scroll.position.maxScrollExtent - 400) {
+        ref.read(connectionsProvider.notifier).loadMore();
       }
-    } catch (_) {
-      return false;
-    }
+    });
   }
 
-  Future<bool> isFollowing(String targetId) async {
-    final uid = supabase.auth.currentUser?.id;
-    if (uid == null || targetId.isEmpty || uid == targetId) return false;
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _removeConnection(String userId, String userName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Retirer l\'abonnement'),
+        content: Text('Voulez-vous vraiment vous désabonner de $userName ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Se désabonner'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
-      final ex = await supabase.from('follows').select().eq('follower_id', uid).eq('following_id', targetId).maybeSingle();
-      return ex != null;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<Set<String>> getLikedMediaIds(List<String> ids) async {
-    if (ids.isEmpty) return {};
-    try {
-      final r = await supabase.rpc('get_liked_media_ids', params: {'p_media_ids': ids});
-      return (r as List).map((e) => e.toString()).toSet();
-    } catch (_) {
-      final uid = supabase.auth.currentUser?.id;
-      if (uid == null) return {};
-      final r = await supabase.from('media_likes').select('media_id').eq('user_id', uid).inFilter('media_id', ids);
-      return (r as List).map((e) => e['media_id'].toString()).toSet();
-    }
-  }
-
-  // ---- PROFILE ----
-  Future<Map<String, dynamic>?> fetchProfile(String userId) async {
-    try {
-      return await supabase.from('profiles').select().eq('id', userId).maybeSingle();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<Map<String, dynamic>> fetchUserStats(String userId) async {
-    try {
-      final followersCount = await supabase.from('follows').count(CountOption.exact).eq('following_id', userId);
-      final followingCount = await supabase.from('follows').count(CountOption.exact).eq('follower_id', userId);
-      final postsCount = await supabase.from('media_content').count(CountOption.exact).eq('user_id', userId);
-
-      return {
-        'followers': followersCount,
-        'following': followingCount,
-        'posts': postsCount,
-      };
-    } catch (_) {
-      return {'followers': 0, 'following': 0, 'posts': 0};
-    }
-  }
-
-  // ---- ADMIN ----
-  Future<List<MediaContent>> fetchAllMedia({int page = 0, int limit = 50}) async {
-    try {
-      final s = page * limit;
-      final data = await supabase.from('media_content').select().order('created_at', ascending: false).range(s, s + limit - 1) as List;
-      return data.map((e) => MediaContent.fromJson(e as Map<String, dynamic>)).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<List<MediaContent>> fetchAllMediaPaginated({int limit = 30, int offset = 0}) async {
-    try {
-      final data = await supabase.from('media_content').select().order('created_at', ascending: false).range(offset, offset + limit - 1) as List;
-      return data.map((e) => MediaContent.fromJson(e as Map<String, dynamic>)).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  // ---- UPLOAD HELPERS ----
-
-  Future<String> _upload(PlatformFile f, String base) async {
-    if (f.bytes == null) throw Exception('withData:true requis');
-    final name = '${_uuid.v4()}${p.extension(f.name)}';
-    final path = '$base/$name';
-    await supabase.storage.from('media').uploadBinary(path, f.bytes!, fileOptions: const FileOptions(cacheControl: '31536000', upsert: true));
-    return supabase.storage.from('media').getPublicUrl(path);
-  }
-
-  /// Upload direct depuis des bytes bruts — utilisé notamment pour la
-  /// miniature générée automatiquement à partir de la vidéo.
-  Future<String> _uploadBytes(Uint8List bytes, String base, String ext) async {
-    final name = '${_uuid.v4()}$ext';
-    final path = '$base/$name';
-    await supabase.storage.from('media').uploadBinary(path, bytes, fileOptions: const FileOptions(cacheControl: '31536000', upsert: true));
-    return supabase.storage.from('media').getPublicUrl(path);
-  }
-
-  /// Génère une miniature (JPEG) à partir de la première frame de la vidéo.
-  /// Retourne `null` sur le web ou en cas d'échec — jamais d'exception,
-  /// pour ne jamais bloquer la publication faute de couverture.
-  Future<Uint8List?> _generateThumbnailFromVideo(PlatformFile videoFile) async {
-    if (kIsWeb) return null; // video_thumbnail non supporté sur le web
-    final path = videoFile.path;
-    if (path == null) return null;
-    try {
-      return await VideoThumbnail.thumbnailData(
-        video: path,
-        imageFormat: ImageFormat.JPEG,
-        quality: 75,
-        maxWidth: 720,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // ---- CRÉATION / MISE À JOUR ----
-
-  /// [episodeFiles] : pour une série — liste de fichiers vidéo additionnels
-  /// (au-delà de la vidéo principale [videoFile]) qui seront uploadés et
-  /// stockés dans `episodesUrls`.
-  Future<MediaContent> insertWithFiles(
-    MediaContent item, {
-    PlatformFile? coverFile,
-    PlatformFile? videoFile,
-    List<PlatformFile>? episodeFiles,
-    ProgressCallback? onProgress,
-  }) async {
-    final user = supabase.auth.currentUser;
-    if (user == null) {
-      throw Exception("Utilisateur non connecté. Impossible de publier.");
-    }
-
-    final nid = _uuid.v4();
-    String? c = item.coverUrl, v = item.videoUrl;
-    List<String> episodeUrls = List<String>.from(item.episodesUrls);
-
-    // Poids de progression réparti entre vidéo principale, couverture et épisodes
-    final totalSteps = 1 + (episodeFiles?.length ?? 0) + 1; // vidéo + épisodes + couverture
-    var doneSteps = 0;
-    void bump() {
-      doneSteps++;
-      onProgress?.call((doneSteps / totalSteps).clamp(0.0, 1.0));
-    }
-
-    if (videoFile != null) {
-      v = await _upload(videoFile, 'thix_media/$nid/videos');
-    }
-    bump();
-
-    if (episodeFiles != null && episodeFiles.isNotEmpty) {
-      for (final ep in episodeFiles) {
-        final url = await _upload(ep, 'thix_media/$nid/episodes');
-        episodeUrls.add(url);
-        bump();
+      await ref.read(connectionsProvider.notifier).removeConnection(userId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Vous ne suivez plus $userName'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
       }
     }
-
-    // Couverture : priorité au fichier fourni manuellement, sinon
-    // génération automatique depuis la première frame de la vidéo.
-    if (coverFile != null) {
-      c = await _upload(coverFile, 'thix_media/$nid/covers');
-    } else if (videoFile != null) {
-      final thumbBytes = await _generateThumbnailFromVideo(videoFile);
-      if (thumbBytes != null) {
-        c = await _uploadBytes(thumbBytes, 'thix_media/$nid/covers', '.jpg');
-      }
-    }
-    bump();
-
-    final ins = item
-        .copyWith(
-          id: nid,
-          userId: user.id,
-          coverUrl: c,
-          videoUrl: v,
-          episodesUrls: episodeUrls,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        )
-        .toJson();
-
-    final res = await supabase.from('media_content').insert(ins).select().single();
-
-    return MediaContent.fromJson(res as Map<String, dynamic>);
   }
 
-  Future<MediaContent> updateWithFiles(
-    MediaContent ex, {
-    PlatformFile? newCoverFile,
-    PlatformFile? newVideoFile,
-    List<PlatformFile>? newEpisodeFiles,
-    ProgressCallback? onProgress,
-  }) async {
-    String? c = ex.coverUrl, v = ex.videoUrl;
-    List<String> episodeUrls = List<String>.from(ex.episodesUrls);
+  @override
+  Widget build(BuildContext context) {
+    final asyncConnections = ref.watch(connectionsProvider);
 
-    final totalSteps = 1 + (newEpisodeFiles?.length ?? 0) + 1;
-    var doneSteps = 0;
-    void bump() {
-      doneSteps++;
-      onProgress?.call((doneSteps / totalSteps).clamp(0.0, 1.0));
-    }
+    return Scaffold(
+      backgroundColor: ThixPolicy.surface,
+      appBar: AppBar(
+        backgroundColor: ThixPolicy.card,
+        elevation: 0.5,
+        title: Row(
+          children: [
+            Text(
+              'Mes abonnements',
+              style: ThixPolicy.titleStyle.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 8),
+            asyncConnections.when(
+              data: (l) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: ThixPolicy.gold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${l.length}',
+                  style: TextStyle(
+                    color: ThixPolicy.gold,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              loading: () => const SizedBox(),
+              error: (_, __) => const SizedBox(),
+            ),
+          ],
+        ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new,
+              color: ThixPolicy.textMain, size: 20),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.search, color: ThixPolicy.textMain, size: 22),
+            onPressed: _showSearch,
+          ),
+        ],
+      ),
+      body: asyncConnections.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => _buildErrorWidget(e.toString()),
+        data: (connections) => connections.isEmpty
+            ? _buildEmptyWidget()
+            : RefreshIndicator(
+                color: ThixPolicy.gold,
+                onRefresh: () async =>
+                    ref.invalidate(connectionsProvider),
+                child: ListView.builder(
+                  controller: _scroll,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: connections.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == connections.length) {
+                      return ref.read(connectionsProvider.notifier).hasMore
+                          ? const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              ),
+                            )
+                          : const SizedBox(height: 20);
+                    }
 
-    if (newVideoFile != null) {
-      v = await _upload(newVideoFile, 'thix_media/${ex.id}/videos');
-    }
-    bump();
-
-    if (newEpisodeFiles != null && newEpisodeFiles.isNotEmpty) {
-      for (final ep in newEpisodeFiles) {
-        final url = await _upload(ep, 'thix_media/${ex.id}/episodes');
-        episodeUrls.add(url);
-        bump();
-      }
-    }
-
-    if (newCoverFile != null) {
-      c = await _upload(newCoverFile, 'thix_media/${ex.id}/covers');
-    } else if (newVideoFile != null && (c == null || c!.isEmpty)) {
-      // Régénère une couverture uniquement si aucune n'existe déjà
-      final thumbBytes = await _generateThumbnailFromVideo(newVideoFile);
-      if (thumbBytes != null) {
-        c = await _uploadBytes(thumbBytes, 'thix_media/${ex.id}/covers', '.jpg');
-      }
-    }
-    bump();
-
-    final up = ex.copyWith(coverUrl: c, videoUrl: v, episodesUrls: episodeUrls, updatedAt: DateTime.now()).toJson();
-    await supabase.from('media_content').update(up).eq('id', ex.id);
-
-    return ex.copyWith(coverUrl: c, videoUrl: v, episodesUrls: episodeUrls);
+                    final conn = connections[index];
+                    return ConnectionCard(
+                      userId: conn['user_id'],
+                      displayName: conn['display_name'],
+                      photoUrl: conn['photo_url'],
+                      profession: conn['profession'],
+                      bio: conn['bio'],
+                      connectedAt: conn['connected_at'] ?? '',
+                      onTap: () => context
+                          .push('/network/profile/${conn['user_id']}'),
+                      onMessageTap: () => context
+                          .push('/network/chat/${conn['user_id']}'),
+                      onRemoveTap: () => _removeConnection(
+                        conn['user_id'],
+                        conn['display_name'],
+                      ),
+                    );
+                  },
+                ),
+              ),
+      ),
+    );
   }
 
-  Future<void> deleteMedia(MediaContent item) async {
-    try {
-      await supabase.from('media_content').delete().eq('id', item.id);
-    } catch (_) {
-      // Ignorer l'erreur silencieusement
-    }
+  Widget _buildErrorWidget(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(error, style: ThixPolicy.bodySmallStyle),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => ref.invalidate(connectionsProvider),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ThixPolicy.gold,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Réessayer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: ThixPolicy.gold.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.people_outline,
+              size: 64,
+              color: ThixPolicy.gold.withValues(alpha: 0.5),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Aucun abonnement',
+            style: ThixPolicy.h3Style,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Commencez à suivre des professionnels\nde votre secteur.',
+            textAlign: TextAlign.center,
+            style: ThixPolicy.bodySmallStyle,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => context.push('/network/discover'),
+            icon: const Icon(Icons.explore),
+            label: const Text('Découvrir des personnes'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ThixPolicy.gold,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSearch() {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Rechercher'),
+        content: TextField(
+          controller: _searchCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Nom...',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onChanged: (v) =>
+              ref.read(connectionsProvider.notifier).search(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
   }
 }
