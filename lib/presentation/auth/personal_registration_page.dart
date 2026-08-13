@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart'; // 🌟 Requis pour le Parrainage
-
+import 'package:thix_id/core/theme/thix_design_policy.dart';
 import 'package:thix_id/models/app_user.dart';
 import 'package:thix_id/nav.dart';
 import 'package:thix_id/services/user_service.dart';
