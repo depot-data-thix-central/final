@@ -8,7 +8,7 @@ import 'package:thix_id/auth/auth_controller.dart';
 import 'package:thix_id/models/account_type.dart';
 import 'package:thix_id/nav.dart';
 import 'package:thix_id/supabase/supabase_config.dart';
-
+import 'package:thix_id/presentation/auth/scanner_activation_screen.dart'; 
 import 'package:thix_id/services/network_service.dart';
 import 'package:thix_id/services/user_service.dart';
 import 'package:thix_id/presentation/thix_media/create_post_page.dart';
@@ -411,6 +411,11 @@ class AppRouter {
                       GoRoute(path: 'data', name: 'chatData', pageBuilder: (context, state) => const NoTransitionPage(child: ChatDataSettings())),
                     ],
                   ),
+                  GoRoute(
+  path: 'scanner_activation',
+  builder: (context, state) => const ScannerActivationScreen(),
+),
+
                   GoRoute(path: 'escalate/:conversationId', name: 'chatEscalate', pageBuilder: (context, state) {
                     final conversationId = state.pathParameters['conversationId']!;
                     final fromAgentId = state.uri.queryParameters['agentId'] ?? '';
