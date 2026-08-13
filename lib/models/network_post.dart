@@ -110,17 +110,27 @@ class NetworkPost {
 
   // ─── Factory depuis Supabase ───
   factory NetworkPost.fromJson(Map<String, dynamic> json) {
-    List<String> mediaUrls = [];
-    if (json['media_urls'] != null) {
-      mediaUrls = List<String>.from(json['media_urls'] as List? ?? []);
-    } else {
-      final images = json['image_urls'] != null
-          ? List<String>.from(json['image_urls'] as List? ?? [])
-          : <String>[];
-      final videos = json['video_urls'] != null
-          ? List<String>.from(json['video_urls'] as List? ?? [])
-          : <String>[];
-      mediaUrls = [...images, ...videos];
+    final mediaUrls = <String>[];
+
+    void addAll(dynamic raw) {
+      if (raw is! List) return;
+      for (final e in raw) {
+        final u = e?.toString().trim() ?? '';
+        if (u.isNotEmpty && !mediaUrls.contains(u)) {
+          mediaUrls.add(u);
+        }
+      }
+    }
+
+    addAll(json['media_urls']);
+    addAll(json['image_urls']);
+    addAll(json['video_urls']);
+
+    final single = json['media_url']?.toString().trim();
+    if (single != null &&
+        single.isNotEmpty &&
+        !mediaUrls.contains(single)) {
+      mediaUrls.insert(0, single);
     }
 
     return NetworkPost(
@@ -163,7 +173,6 @@ class NetworkPost {
       repostOfId: json['repost_of_id']?.toString(),
     );
   }
-
   Map<String, dynamic> toJson() {
     return {
       'id': id,
