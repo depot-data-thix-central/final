@@ -1,3 +1,5 @@
+// lib/presentation/education/screens/education_home.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +16,6 @@ import '../widgets/common/formation_card.dart';
 import '../models/category.dart';
 import '../models/formation.dart';
 import '../models/certificate.dart';
-import '../providers/book_provider.dart';
 
 // ============================================================================
 // CONSTANTES COULEURS "ENTREPRISE ÉDUCATION"
@@ -54,7 +55,7 @@ class EducationHome extends ConsumerWidget {
 
   static const _pages = [
     _HomePage(),
-    _MyLearningPage(), // ← Remplacement de _ExplorePage par _MyLearningPage
+    _MyLearningPage(),
     _LibraryPage(),
     _CertificatesPage(),
     _ProfilePage(),
@@ -93,7 +94,7 @@ class _FloatingBottomNav extends ConsumerWidget {
 
   static const _items = [
     (Icons.home_rounded, 'Accueil'),
-    (Icons.play_circle_outline_rounded, 'My Learning'), // ← Mis à jour
+    (Icons.play_circle_outline_rounded, 'My Learning'),
     (Icons.local_library_rounded, 'Bibliothèque'),
     (Icons.workspace_premium_rounded, 'Certificats'),
     (Icons.person_rounded, 'Profil'),
@@ -168,7 +169,7 @@ class _FloatingBottomNav extends ConsumerWidget {
 }
 
 // ============================================================================
-// NOUVEAU ONGLET : MY LEARNING
+// ONGLET MY LEARNING
 // ============================================================================
 class _MyLearningPage extends ConsumerWidget {
   const _MyLearningPage();
@@ -503,7 +504,6 @@ class _HomePageState extends ConsumerState<_HomePage>
                         horizontal: ThixPolicy.s16),
                     child: Row(
                       children: [
-                        // Parcourir pointe bien vers l'onglet 1 "My Learning"
                         Expanded(
                             child: _QuickIcon(
                                 icon: Icons.grid_view_rounded,
@@ -602,7 +602,7 @@ class _HomePageState extends ConsumerState<_HomePage>
                     const SizedBox(height: ThixPolicy.s24),
                   ],
 
-                  // 2. LES PLUS ATTENDUS (Cartes avec détails et ouverture prévue)
+                  // 2. LES PLUS ATTENDUS (VERROUILLÉS JUSQU'À L'OUVERTURE)
                   if (awaitedFormations.isNotEmpty) ...[
                     _SectionHeader(
                         title: 'Les plus attendus',
@@ -630,15 +630,36 @@ class _HomePageState extends ConsumerState<_HomePage>
                     const SizedBox(height: ThixPolicy.s24),
                   ],
 
-                  // 3. CHAQUE CATÉGORIE A SA LIGNE DISTINCTE
+                  // 3. CHAQUE CATÉGORIE A SA LIGNE DISTINCTE (Injection des catégories demandées)
                   categoriesAsync.when(
-                    data: (cats) {
+                    data: (dbCats) {
+                      // 👇 AJOUT DES CATÉGORIES EN DUR ICI 👇
+                      final customCats = [
+                        Category(id: 'cat-langues', name: 'Langues'),
+                        Category(id: 'cat-entrepreneuriat', name: 'Entrepreneuriat'),
+                        Category(id: 'cat-dev', name: 'Développement personnel'),
+                        Category(id: 'cat-culture', name: 'Culture'),
+                      ];
+
+                      final List<Category> allCats = List.from(dbCats);
+                      for (var custom in customCats) {
+                        if (!allCats.any((c) => c.name.toLowerCase() == custom.name.toLowerCase())) {
+                          allCats.add(custom);
+                        }
+                      }
+
                       return Column(
-                        children: cats.map((cat) {
-                          // Tentative de filtrage par catégorie
+                        children: allCats.map((cat) {
+                          // Filtrage robuste pour placer les cours dans la bonne catégorie
                           final catFormations = formations.where((f) {
                             try {
-                              return (f as dynamic).categoryId == cat.id;
+                              final fCatId = (f as dynamic).categoryId;
+                              // Correspondance par ID
+                              if (fCatId == cat.id) return true;
+                              
+                              // Correspondance par nom (au cas où la catégorie est liée différemment)
+                              final fCatName = (f as dynamic).category?.name;
+                              if (fCatName != null && fCatName.toLowerCase() == cat.name.toLowerCase()) return true;
                             } catch (_) {}
                             return false;
                           }).toList();
@@ -666,9 +687,9 @@ class _HomePageState extends ConsumerState<_HomePage>
                                         style: BorderStyle.solid),
                                   ),
                                   alignment: Alignment.center,
-                                  child: const Text(
-                                      'Bientôt de nouveaux cours ici',
-                                      style: TextStyle(
+                                  child: Text(
+                                      'Bientôt de nouveaux cours en ${cat.name}',
+                                      style: const TextStyle(
                                           color: ThixPolicy.textSecondary,
                                           fontWeight: FontWeight.w600)),
                                 )
@@ -715,7 +736,7 @@ class _HomePageState extends ConsumerState<_HomePage>
 }
 
 // ----------------------------------------------------------------------------
-// WIDGET : CARTE SPÉCIALE "LES PLUS ATTENDUS"
+// WIDGET : CARTE SPÉCIALE "LES PLUS ATTENDUS" (VERROUILLÉE)
 // ----------------------------------------------------------------------------
 class _AwaitedFormationCard extends StatelessWidget {
   final dynamic formation; 
@@ -724,7 +745,29 @@ class _AwaitedFormationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.push('/education/formation/${formation.id}'),
+      // 👇 BLOQUE L'OUVERTURE ET AFFICHE UN MESSAGE 👇
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.lock_clock, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Bientôt disponible ! (Ouverture prévue prochainement)',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: ThixPolicy.primaryDeep,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -777,14 +820,25 @@ class _AwaitedFormationCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     formation.title,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
                         color: _eduNavyBlue),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 4),
+                  // 👇 AFFICHAGE DE L'ACADÉMIE 👇
+                  Text(
+                    formation.instructorName ?? 'THIX Academy',
+                    style: const TextStyle(
+                        color: ThixPolicy.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 10),
                   const Row(
                     children: [
                       Icon(Icons.calendar_today_rounded,
@@ -1093,6 +1147,7 @@ class _HeroCarouselState extends State<_HeroCarousel> {
                               height: 1.2,
                               letterSpacing: -0.5)),
                       const SizedBox(height: 8),
+                      // 👇 AFFICHAGE DE L'ACADÉMIE 👇
                       Text(f.instructorName ?? 'THIX Academy',
                           style: const TextStyle(
                               color: Colors.white70,
