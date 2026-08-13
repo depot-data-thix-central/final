@@ -1,171 +1,270 @@
 // lib/presentation/education/pages/certificate_detail_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../models/certificate.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class CertificateDetailPage extends StatelessWidget {
+import 'package:thix_id/presentation/education/models/certificate.dart';
+import 'package:thix_id/presentation/education/widgets/certificate_canvas.dart';
+
+class CertificateDetailPage extends StatefulWidget {
   final Certificate certificate;
 
-  const CertificateDetailPage({
-    super.key,
-    required this.certificate,
-  });
+  const CertificateDetailPage({super.key, required this.certificate});
+
+  @override
+  State<CertificateDetailPage> createState() => _CertificateDetailPageState();
+}
+
+class _CertificateDetailPageState extends State<CertificateDetailPage> {
+  Map<String, dynamic>? _formation;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFormation();
+  }
+
+  Future<void> _loadFormation() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('formations')
+          .select('''
+            title, instructor_name, organized_by, provider,
+            certificate_header, certificate_body, certificate_footer,
+            certificate_logo_url, certificate_signature_url,
+            certificate_signatory_name, certificate_signatory_title,
+            certificate_template_id
+          ''')
+          .eq('id', widget.certificate.formationId)
+          .maybeSingle();
+      if (mounted) {
+        setState(() {
+          _formation = res;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String get _verifyPath =>
+      '/verify/${widget.certificate.verificationHash}';
+
+  String get _verifyUrl {
+    // Adapte à ton domaine de prod / GitHub Pages
+    return 'https://depot-data-thix-central.github.io/final/#$_verifyPath';
+  }
+
+  CertificateData _toCanvasData() {
+    final c = widget.certificate;
+    final f = _formation;
+    final academy = f?['instructor_name'] as String? ??
+        f?['organized_by'] as String? ??
+        f?['provider'] as String? ??
+        'THIX Academy';
+    final issued = c.issuedAt;
+    final dateStr =
+        '\( {issued.day.toString().padLeft(2, '0')}/ \){issued.month.toString().padLeft(2, '0')}/${issued.year}';
+
+    return CertificateData(
+      academyName: academy,
+      header: f?['certificate_header'] as String? ?? 'certifie que',
+      learnerName: c.issuedToName ?? 'Apprenant',
+      body: f?['certificate_body'] as String? ??
+          'a complété avec succès l\'intégralité de la formation.',
+      courseTitle: f?['title'] as String? ??
+          c.formationTitle ??
+          'Formation',
+      footer: f?['certificate_footer'] as String? ?? 'Fait à Kinshasa',
+      signatoryName:
+          f?['certificate_signatory_name'] as String? ?? academy,
+      signatoryTitle:
+          f?['certificate_signatory_title'] as String? ?? '',
+      logoUrl: f?['certificate_logo_url'] as String?,
+      signatureUrl: f?['certificate_signature_url'] as String?,
+      serial: c.serialNumber ?? '—',
+      dateLabel: dateStr,
+      templateId: c.templateId ??
+          f?['certificate_template_id'] as String? ??
+          'classic_navy',
+    );
+  }
+
+  void _share() {
+    Share.share(
+      'Mon certificat THIX\n'
+      '${widget.certificate.issuedToName ?? ""}\n'
+      'Vérifier : $_verifyUrl\n'
+      'N° ${widget.certificate.serialNumber ?? widget.certificate.id}',
+      subject: 'Certificat de formation',
+    );
+  }
+
+  void _copyHash() {
+    Clipboard.setData(
+      ClipboardData(text: widget.certificate.verificationHash),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Code de vérification copié')),
+    );
+  }
+
+  void _openVerify() {
+    context.push(_verifyPath);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final c = widget.certificate;
+    final w = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         title: const Text(
           'Certificat',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0F172A),
+        foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.download_rounded),
-            onPressed: _downloadCertificate,
+            icon: const Icon(Icons.copy_rounded),
+            tooltip: 'Copier le hash',
+            onPressed: _copyHash,
           ),
           IconButton(
             icon: const Icon(Icons.share_rounded),
-            onPressed: _shareCertificate,
+            onPressed: _share,
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Aperçu du certificat (grand)
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0A1F44).withOpacity(0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.network(
-                  certificate.certificateUrl,
-                  height: 280,
-                  width: double.infinity,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (_, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return SizedBox(
-                      height: 280,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 280,
-                    color: const Color(0xFFF0F7FF),
-                    child: const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.picture_as_pdf_rounded, size: 48, color: Color(0xFF7386A8)),
-                          SizedBox(height: 8),
-                          Text(
-                            'Aperçu non disponible',
-                            style: TextStyle(color: Color(0xFF7386A8)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Informations du certificat
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0A1F44).withOpacity(0.06),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Détails du certificat',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF1A1A2E),
+                  // ── Canvas pro ──
+                  Center(
+                    child: CertificateCanvas(
+                      data: _toCanvasData(),
+                      width: w - 32,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _buildInfoRow('ID', certificate.id),
-                  _buildInfoRow('Délivré à', certificate.userId), // À remplacer par le nom réel de l'utilisateur
-                  _buildInfoRow('Formation', certificate.formationId), // À remplacer par le vrai nom de la formation
-                  _buildInfoRow('Date d\'émission', _formatDate(certificate.issuedAt)),
-                  const Divider(height: 24),
-                  // Bouton de vérification
-                  Center(
-                    child: ElevatedButton.icon(
-                      onPressed: _verifyCertificate,
-                      icon: const Icon(Icons.verified_rounded),
-                      label: const Text('Vérifier l\'authenticité'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2D6CDF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
+                  const SizedBox(height: 20),
+
+                  // ── Infos ──
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Détails',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                        _row('Titulaire', c.issuedToName ?? '—'),
+                        _row(
+                          'Formation',
+                          _formation?['title']?.toString() ??
+                              c.formationTitle ??
+                              c.formationId,
+                        ),
+                        _row(
+                          'N° série',
+                          c.serialNumber ?? '—',
+                        ),
+                        _row(
+                          'Émis le',
+                          '\( {c.issuedAt.day}/ \){c.issuedAt.month}/${c.issuedAt.year}',
+                        ),
+                        const Divider(height: 24),
+                        const Text(
+                          'Code anti-fraude',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SelectableText(
+                          c.verificationHash,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _openVerify,
+                            icon: const Icon(Icons.verified_rounded),
+                            label: const Text(
+                              'Vérifier l\'authenticité',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2D6CDF),
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Center(
+                          child: Text(
+                            'Produit par THIX ID CENTRAL',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 80),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _row(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF7386A8),
-              fontSize: 14,
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 13,
+              ),
             ),
           ),
           Expanded(
@@ -173,41 +272,13 @@ class CertificateDetailPage extends StatelessWidget {
               value,
               textAlign: TextAlign.end,
               style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1A1A2E),
-                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
       ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} à ${date.hour}h${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _downloadCertificate() {
-    // Télécharger le certificat (à implémenter avec un package de téléchargement)
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Téléchargement en cours de développement...')),
-    );
-  }
-
-  void _shareCertificate() {
-    Share.share(
-      'Consultez mon certificat : ${certificate.certificateUrl}',
-      subject: 'Certificat de formation',
-    );
-  }
-
-  void _verifyCertificate() {
-    // Vérifier l'authenticité (appel API ou redirection)
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Vérification en cours de développement...')),
     );
   }
 }
