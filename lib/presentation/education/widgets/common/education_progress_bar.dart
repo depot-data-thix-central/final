@@ -1,5 +1,6 @@
 // lib/presentation/education/widgets/common/education_progress_bar.dart
 import 'package:flutter/material.dart';
+import 'package:thix_id/core/theme/thix_design_policy.dart'; // ✅ Import du design system
 
 class EducationProgressBar extends StatelessWidget {
   final double progress; // 0.0 à 1.0
@@ -21,9 +22,14 @@ class EducationProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // S'assure que la valeur reste toujours entre 0.0 et 1.0
     final clampedProgress = progress.clamp(0.0, 1.0);
-    final bgColor = backgroundColor ?? const Color(0xFFF0F7FF);
-    final pColor = progressColor ?? const Color(0xFF2D6CDF);
+    final isCompleted = clampedProgress >= 1.0;
+    
+    // Application des couleurs du Design System THIX
+    final bgColor = backgroundColor ?? ThixPolicy.border;
+    // La barre devient automatiquement verte si terminée (sauf si une couleur personnalisée est forcée)
+    final pColor = progressColor ?? (isCompleted ? ThixPolicy.success : ThixPolicy.primary);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -36,15 +42,16 @@ class EducationProgressBar extends StatelessWidget {
                 labelText ?? 'Progression',
                 style: const TextStyle(
                   fontSize: 12,
-                  color: Color(0xFF7386A8),
+                  color: ThixPolicy.textSecondary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
                 '${(clampedProgress * 100).toInt()}%',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2D6CDF),
+                  fontWeight: FontWeight.w800,
+                  color: pColor, // Le texte s'accorde à la couleur de la barre
                 ),
               ),
             ],
