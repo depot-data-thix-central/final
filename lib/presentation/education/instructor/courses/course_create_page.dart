@@ -446,7 +446,7 @@ class _CourseCreatePageState extends ConsumerState<CourseCreatePage> {
 
                     const SizedBox(height: ThixPolicy.s24),
 
-                    // ─── CATÉGORIE (AVEC INJECTION MANUELLE) ───
+                    // ─── CATÉGORIE ───
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(ThixPolicy.s20),
@@ -464,34 +464,18 @@ class _CourseCreatePageState extends ConsumerState<CourseCreatePage> {
                                   fontSize: 16,
                                   color: ThixPolicy.textMain)),
                           const SizedBox(height: ThixPolicy.s16),
+                          
+                          // 👇 CORRECTION ICI : On utilise uniquement les données de la BDD 👇
                           categoriesAsync.when(
-                            data: (dbCats) {
-                              // 👇 AJOUT DES CATÉGORIES EN DUR POUR LA SÉLECTION 👇
-                              final customCats = [
-                                Category(id: 'cat-langues', name: 'Langues'),
-                                Category(id: 'cat-entrepreneuriat', name: 'Entrepreneuriat'),
-                                Category(id: 'cat-dev', name: 'Développement personnel'),
-                                Category(id: 'cat-culture', name: 'Culture'),
-                              ];
-
-                              final List<Category> allCats = List.from(dbCats);
-                              for (var custom in customCats) {
-                                if (!allCats.any((c) => c.name.toLowerCase() == custom.name.toLowerCase())) {
-                                  allCats.add(custom);
-                                }
-                              }
-
+                            data: (cats) {
                               return Wrap(
                                 spacing: ThixPolicy.s8,
                                 runSpacing: ThixPolicy.s8,
-                                children: allCats
-                                    .map((c) => EducationCategoryChip(
+                                children: cats.map((c) => EducationCategoryChip(
                                           label: c.name,
                                           isSelected: _categoryId == c.id,
-                                          onTap: () =>
-                                              setState(() => _categoryId = c.id),
-                                        ))
-                                    .toList(),
+                                          onTap: () => setState(() => _categoryId = c.id),
+                                        )).toList(),
                               );
                             },
                             loading: () => const Center(
