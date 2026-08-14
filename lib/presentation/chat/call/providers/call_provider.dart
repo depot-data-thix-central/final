@@ -350,7 +350,7 @@ class CallNotifier extends StateNotifier<CallState> {
   }
 
   Future<void> hangUp({bool skipSignal = false}) async {
-    _stopRingtone(); // 🔇 Coupe tout son en cours
+    _stopRingtone();
 
     final inviteId = state.inviteId;
     final secs = state.duration.inSeconds;
@@ -364,7 +364,8 @@ class CallNotifier extends StateNotifier<CallState> {
     _ringTimeout?.cancel();
     _statusSub?.cancel();
 
-    await _media.leave();
+    // ✅ Libère complètement Agora (preview + channel + engine)
+    await _media.disposeEngine();
 
     if (!skipSignal && inviteId != null) {
       try {
