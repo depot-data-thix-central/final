@@ -92,6 +92,13 @@ class CertificationService {
     required CertificationTier requestedTier,
     String? reason,
   }) async {
+    // 🔒 Blocage pour le niveau "Officiel / Institutions"
+    if (requestedTier.isInviteOnly) {
+      throw Exception(
+        'Le niveau Officiel / Institutions est accessible uniquement sur invitation THIX.',
+      );
+    }
+
     final uid = _uid;
     if (uid == null) throw Exception('Non authentifié');
 
