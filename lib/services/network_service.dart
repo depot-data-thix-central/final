@@ -1203,19 +1203,56 @@ class NetworkService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // PROFILE / POSTS USER
+  // PROFILE / POSTS USER - 🚀 CORRIGÉ
   // ─────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> getUserProfile(String userId) async {
+    // 1. Récupération des infos de base (ajout de cover_url par sécurité)
     final res = await _supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, profession, bio')
+        .select('id, display_name, avatar_url, cover_url, profession, bio') 
         .eq('id', userId)
         .maybeSingle();
+        
     if (res == null) return null;
-    final posts =
-        await _supabase.from('posts').select('id').eq('user_id', userId);
-    return {...res, 'posts_count': (posts as List).length};
+
+    try {
+      // 2. Compteurs performants natifs (.count renvoie directement un int avec Supabase Flutter v2+)
+      final postsCount = await _supabase
+          .from('posts')
+          .count(CountOption.exact)
+          .eq('user_id', userId);
+
+      final followersCount = await _supabase
+          .from('follows')
+          .count(CountOption.exact)
+          .eq('following_id', userId);
+
+      final followingCount = await _supabase
+          .from('follows')
+          .count(CountOption.exact)
+          .eq('follower_id', userId);
+
+      return {
+        ...res,
+        'posts_count': postsCount,
+        'followers_count': followersCount,
+        'following_count': followingCount,
+      };
+    } catch (e) {
+      // 3. Fallback de sécurité (si la version du SDK Supabase demande un traitement différent)
+      debugPrint('Fallback getUserProfile count: $e');
+      final posts = await _supabase.from('posts').select('id').eq('user_id', userId);
+      final followers = await _supabase.from('follows').select('follower_id').eq('following_id', userId);
+      final following = await _supabase.from('follows').select('following_id').eq('follower_id', userId);
+      
+      return {
+        ...res,
+        'posts_count': (posts as List).length,
+        'followers_count': (followers as List).length,
+        'following_count': (following as List).length,
+      };
+    }
   }
 
   Future<List<NetworkPost>> getUserPosts(
