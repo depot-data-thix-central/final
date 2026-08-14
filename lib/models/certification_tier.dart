@@ -72,6 +72,17 @@ extension CertificationTierX on CertificationTier {
       _ => CertificationTier.standard,
     };
   }
+
+  /// Prix en USD (null = sur invitation)
+  double? get priceUsd => switch (this) {
+        CertificationTier.standard => 3.0,
+        CertificationTier.premium => 7.0,
+        CertificationTier.enterprise => 30.0,
+        CertificationTier.official => null,
+      };
+
+  bool get isInviteOnly => this == CertificationTier.official;
+  bool get isPaid => priceUsd != null;
 }
 
 /// Statut de la demande / génération de certification
