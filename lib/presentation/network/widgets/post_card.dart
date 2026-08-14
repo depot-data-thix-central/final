@@ -21,7 +21,6 @@ import 'package:thix_id/models/certification_tier.dart';
 import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
 import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
 
-
 // ─── HELPER POUR FORMATER LES COMPTEURS ───
 String _formatCountHelper(int count) {
   if (count >= 1000000) {
@@ -664,7 +663,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
           final likesCount = ref.watch(postItemProvider.select((p) => p.likesCount));
           final isOwner = widget.currentProfileId == post.userId;
 
-          // Récupération des données du profil de l'auteur pour la certification
+          // 1. Récupération des données du profil de l'auteur pour la certification
           final authorProfile = ref.watch(userProfileProvider(post.userId)).valueOrNull;
           
           CertificationTier? tier;
@@ -735,14 +734,11 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                                         setState(() => _isFollowingLocal = true);
                                         
                                         try {
-                                          // 1. Action en DB
                                           await ref.read(networkServiceProvider).followUser(post.userId);
-                                          // 2. Invalidation pour mise à jour globale de l'app
                                           ref.invalidate(followStatusProvider(post.userId));
                                           ref.invalidate(userProfileProvider(post.userId));
                                           widget.onFollow?.call();
                                         } catch (_) {
-                                          // En cas d'erreur réseau, annule l'UI optimiste
                                           if (mounted) setState(() => _isFollowingLocal = false);
                                         } finally {
                                           if (mounted) setState(() => _followBusy = false);
@@ -765,28 +761,33 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Ligne Nom + Badge de Certification
+                                  // ✅ LA CORRECTION : ROW COMPLET AVEC LE BADGE
                                   Row(
                                     children: [
                                       Flexible(
                                         child: Text(
-                                          post.authorName, 
-                                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: ThixPolicy.textMain), 
-                                          maxLines: 1, 
-                                          overflow: TextOverflow.ellipsis
+                                          post.authorName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                            color: ThixPolicy.textMain,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                       if (isCertified)
                                         CertificationNameBadge(
-                                          tier: tier, 
-                                          status: status, 
-                                          iconSize: 15, 
-                                          padding: const EdgeInsets.only(left: 4)
+                                          tier: tier,
+                                          status: status,
+                                          showLabel: false, // sceau seul
+                                          iconSize: 16,
+                                          padding: const EdgeInsets.only(left: 5),
                                         )
                                       else if (isLegacyVerified)
                                         const Padding(
-                                          padding: EdgeInsets.only(left: 4), 
-                                          child: Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 15)
+                                          padding: EdgeInsets.only(left: 4),
+                                          child: Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 15),
                                         ),
                                     ],
                                   ),
@@ -1073,15 +1074,30 @@ class _OriginalPostEmbed extends ConsumerWidget {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
+                          // ✅ LA CORRECTION: ROW COMPLET DANS L'EMBED REPOST
                           child: Row(
                             children: [
                               Flexible(
-                                child: Text(original.authorName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: ThixPolicy.textMain), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                child: Text(
+                                  original.authorName, 
+                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: ThixPolicy.textMain), 
+                                  maxLines: 1, 
+                                  overflow: TextOverflow.ellipsis
+                                ),
                               ),
                               if (originalIsCertified)
-                                CertificationNameBadge(tier: originalTier, status: originalStatus, iconSize: 14, padding: const EdgeInsets.only(left: 4))
+                                CertificationNameBadge(
+                                  tier: originalTier, 
+                                  status: originalStatus, 
+                                  showLabel: false, // ✅ AJOUTÉ COMME DEMANDÉ
+                                  iconSize: 14, 
+                                  padding: const EdgeInsets.only(left: 4)
+                                )
                               else if (originalIsLegacyVerified)
-                                const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 14)),
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 4), 
+                                  child: Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 14)
+                                ),
                             ],
                           ),
                         ),
