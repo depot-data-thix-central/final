@@ -37,6 +37,21 @@ class ChatService {
     return 'Utilisateur inconnu';
   }
 
+  Future<void> _assertParticipant(String conversationId) async {
+    if (currentUserId.isEmpty) {
+      throw Exception('Non authentifié');
+    }
+    final row = await _supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', conversationId)
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+    if (row == null) {
+      throw Exception('Accès refusé à cette conversation');
+    }
+  }
+
   // ============================================================
   // PRÉSENCE
   // ============================================================
@@ -308,6 +323,31 @@ class ChatService {
   // CRÉATION DE CONVERSATIONS
   // ============================================================
 
+  Future<ChatConversation> createDirectConversation(String otherUserId) async {
+    if (currentUserId.isEmpty) throw Exception('Not logged in');
+    if (otherUserId.isEmpty || otherUserId == currentUserId) {
+      throw Exception('Cible invalide');
+    }
+
+    final convId = await _supabase.rpc(
+      'create_direct_conversation',
+      params: {'p_other_user_id': otherUserId},
+    );
+
+    final id = convId?.toString();
+    if (id == null || id.isEmpty) {
+      throw Exception('Impossible de créer la conversation');
+    }
+
+    return (await getConversation(id)) ??
+        ChatConversation(
+          id: id,
+          isGroup: false,
+          participantIds: [currentUserId, otherUserId],
+          updatedAt: DateTime.now().toUtc(),
+        );
+  }
+
   Future<ChatConversation> createConversation({
     required List<String> participantIds,
     bool isGroup = false,
@@ -330,16 +370,15 @@ class ChatService {
     });
 
     final allParticipants = {...participantIds, uid};
-    await Future.wait(
-      allParticipants.map(
-        (pid) => _supabase.from('conversation_participants').insert({
-          'conversation_id': conversationId,
-          'user_id': pid,
-          'role': pid == uid ? 'admin' : 'member',
-          'last_read_at': now,
-        }),
-      ),
-    );
+    
+    // RLS stricte: On insère uniquement l'utilisateur courant côté client.
+    // L'ajout des autres membres devra se faire via une RPC ou des droits d'admin côté serveur.
+    await _supabase.from('conversation_participants').insert({
+      'conversation_id': conversationId,
+      'user_id': uid,
+      'role': 'admin',
+      'last_read_at': now,
+    });
 
     return ChatConversation(
       id: conversationId,
@@ -397,6 +436,8 @@ class ChatService {
     int offset = 0,
   }) async {
     try {
+      await _assertParticipant(conversationId);
+
       final response = await _supabase
           .from('messages')
           .select('''
@@ -439,6 +480,8 @@ class ChatService {
     final uid = currentUserId;
     if (uid.isEmpty) throw Exception('Not logged in');
 
+    await _assertParticipant(conversationId);
+
     // 🌟 CORRECTION DU BUG DES 3 HEURES DE DÉCALAGE : ON FORCE UTC
     final now = DateTime.now().toUtc();
     final deleteAt = isEphemeral && ephemeralDuration != null
@@ -472,11 +515,12 @@ class ChatService {
   }
 
   Future<void> updateMessage(String messageId, String newContent) async {
+    if (currentUserId.isEmpty) throw Exception('Not logged in');
     try {
       await _supabase.from('messages').update({
         'content': newContent,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', messageId);
+      }).eq('id', messageId).eq('sender_id', currentUserId);
     } catch (e) {
       debugPrint('❌ updateMessage: $e');
       rethrow;
@@ -618,11 +662,12 @@ class ChatService {
   }
 
   Future<void> deleteMessage(String messageId) async {
+    if (currentUserId.isEmpty) throw Exception('Not logged in');
     try {
       await _supabase.from('messages').update({
         'is_deleted': true,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', messageId);
+      }).eq('id', messageId).eq('sender_id', currentUserId);
     } catch (e) {
       debugPrint('❌ deleteMessage: $e');
       rethrow;
