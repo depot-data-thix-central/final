@@ -327,38 +327,57 @@ class _NewConversationPageState extends ConsumerState<NewConversationPage> {
 
   Future<void> _startChat() async {
     final state = ref.read(newConvProvider);
-    if (state.selected.isEmpty) { 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionnez un contact'))); 
-      return; 
+    if (state.selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sélectionnez un contact')),
+      );
+      return;
     }
-    
-    final cur = Supabase.instance.client.auth.currentUser?.id; 
+
+    final cur = Supabase.instance.client.auth.currentUser?.id;
     if (cur == null) return;
-    
-    final notConnected = state.selected.where((u) { 
-      final s = state.connStatus[u['id']] ?? 'none'; 
-      return s != 'connected'; 
+
+    final notConnected = state.selected.where((u) {
+      final s = state.connStatus[u['id']] ?? 'none';
+      return s != 'connected';
     }).toList();
-    
-    if (notConnected.isNotEmpty) { 
-      final names = notConnected.map((u) => u['display_name']).join(', '); 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('En attente de connexion: $names'), backgroundColor: Colors.orange)); 
-      return; 
+
+    if (notConnected.isNotEmpty) {
+      final names = notConnected.map((u) => u['display_name']).join(', ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('En attente de connexion: $names'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
     }
-    
+
     ref.read(newConvProvider.notifier).setCreating(true);
     try {
-      final ids = [...state.selected.map((u) => u['id'] as String), cur];
-      final conv = await _chatService.createConversation(
-        participantIds: ids.toSet().toList(), 
-        isGroup: state.selected.length > 1, 
-        groupName: state.selected.length > 1 ? state.groupName.trim() : null
+      // ── 1 contact = DM via RPC (RLS-safe) ──
+      if (state.selected.length == 1) {
+        final otherId = state.selected.first['id'] as String;
+        final conv = await _chatService.createDirectConversation(otherId);
+        if (mounted) {
+          context.pushReplacement(AppRoutes.chatDetail(conv.id), extra: conv);
+        }
+        return;
+      }
+
+      // ── Plusieurs = groupe (nécessite RPC groupe, sinon erreur claire) ──
+      throw Exception(
+        'Création de groupe : utilisez une RPC create_group_conversation '
+        '(insert multi-participants bloqué par RLS).',
       );
-      if (mounted) context.pushReplacement(AppRoutes.chatDetail(conv.id), extra: conv);
-    } catch(e) { 
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: _C.red)); 
-    } finally { 
-      ref.read(newConvProvider.notifier).setCreating(false); 
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: _C.red),
+        );
+      }
+    } finally {
+      ref.read(newConvProvider.notifier).setCreating(false);
     }
   }
 
