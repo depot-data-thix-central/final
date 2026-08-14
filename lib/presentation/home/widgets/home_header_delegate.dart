@@ -134,7 +134,6 @@ class _PremiumHeader extends StatelessWidget {
                     // Badge visible seulement si connecté
                     if (isAuthenticated)
                       const CertificationNameBadge(
-                        showLabel: true,
                         iconSize: 12,
                         padding: EdgeInsets.only(left: 6),
                       ),
