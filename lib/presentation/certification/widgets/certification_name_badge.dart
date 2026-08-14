@@ -6,7 +6,8 @@ import 'package:thix_id/models/certification_tier.dart';
 import 'package:thix_id/presentation/certification/providers/certification_provider.dart';
 import 'package:thix_id/services/certification_service.dart';
 
-/// Sceau certification (icône seule, sans nom à côté — style Facebook)
+/// Sceau certification (icône seule, sans nom à côté — taille et sobriété
+/// façon Facebook, mais avec la forme dentelée propre à THIX).
 class CertificationNameBadge extends ConsumerWidget {
   final double iconSize;
   final EdgeInsetsGeometry padding;
@@ -15,8 +16,8 @@ class CertificationNameBadge extends ConsumerWidget {
 
   const CertificationNameBadge({
     super.key,
-    this.iconSize = 18,
-    this.padding = const EdgeInsets.only(left: 6),
+    this.iconSize = 15,
+    this.padding = const EdgeInsets.only(left: 4),
     this.tier,
     this.status,
   });
@@ -55,7 +56,7 @@ class CertificationNameBadge extends ConsumerWidget {
   }
 }
 
-/// Sceau seul — cercle central + anneau dentelé + check blanc.
+/// Sceau seul — contour dentelé + check blanc, plat et net (pas de glow).
 class _CertSeal extends StatelessWidget {
   final CertificationTier tier;
   final CertificationStatus status;
@@ -78,22 +79,7 @@ class _CertSeal extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Glow doux autour du sceau
-          Container(
-            width: size * 0.9,
-            height: size * 0.9,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.45),
-                  blurRadius: size * 0.28,
-                  spreadRadius: 0.5,
-                ),
-              ],
-            ),
-          ),
-          // Contour dentelé exact (scallop / médaille)
+          // Contour dentelé exact (scallop / médaille) — sans glow autour
           CustomPaint(
             size: Size(size, size),
             painter: _ScallopedSealPainter(color: color),
@@ -102,13 +88,7 @@ class _CertSeal extends StatelessWidget {
           Icon(
             pending ? Icons.hourglass_top_rounded : Icons.check_rounded,
             color: Colors.white,
-            size: size * 0.5,
-            shadows: [
-              Shadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 2,
-              ),
-            ],
+            size: size * 0.52,
           ),
         ],
       ),
@@ -116,8 +96,9 @@ class _CertSeal extends StatelessWidget {
   }
 }
 
-/// Dessine le contour dentelé (forme exacte du sceau de certification)
-/// avec un dégradé radial, un léger relief, et une bordure blanche fine.
+/// Dessine le contour dentelé (forme exacte du sceau de certification),
+/// remplissage plat (une seule teinte, léger dégradé interne discret),
+/// sans ombre ni halo autour — rendu net comme les badges Facebook/X.
 class _ScallopedSealPainter extends CustomPainter {
   final Color color;
   final int notches;
@@ -125,7 +106,7 @@ class _ScallopedSealPainter extends CustomPainter {
 
   _ScallopedSealPainter({
     required this.color,
-    this.notches = 20,
+    this.notches = 18,
     this.amplitude = 0.09,
   });
 
@@ -154,31 +135,24 @@ class _ScallopedSealPainter extends CustomPainter {
     final radius = size.width / 2;
     final path = _scallopPath(center, radius);
 
-    // Remplissage dégradé (relief médaille)
+    // Remplissage plat avec très léger dégradé interne (relief discret,
+    // sans ombre portée ni halo extérieur)
     final fillPaint = Paint()
       ..shader = RadialGradient(
         colors: [
+          Color.lerp(color, Colors.white, 0.08)!,
           color,
-          Color.lerp(color, Colors.black, 0.28)!,
         ],
+        stops: const [0.0, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawPath(path, fillPaint);
 
-    // Bordure blanche fine (effet sceau embossé)
+    // Fin liseré blanc translucide (bord net, pas de contraste fort)
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = radius * 0.09
-      ..color = Colors.white.withOpacity(0.4);
-    canvas.drawPath(path, borderPaint);
-
-    // Cercle intérieur légèrement plus clair
-    final innerPaint = Paint()..color = color.withOpacity(0.35);
-    canvas.drawCircle(center, radius * 0.62, innerPaint);
-    final innerBorder = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = radius * 0.06
       ..color = Colors.white.withOpacity(0.25);
-    canvas.drawCircle(center, radius * 0.62, innerBorder);
+    canvas.drawPath(path, borderPaint);
   }
 
   @override
