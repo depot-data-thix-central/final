@@ -22,32 +22,47 @@ class _FollowingListPageState extends State<FollowingListPage> {
   }
 
   Future<void> load() async {
-  setState(() { loading = true; });
-  try {
-    final res = await Supabase.instance.client
-        .from('follows')
-        .select('''
-          following_id,
-          profiles!follows_following_id_fkey (
-            id,
-            display_name,
-            photo_url,
-            avatar_url
-          )
-        ''')
-        .eq('follower_id', widget.userId);
+    setState(() { loading = true; });
+    try {
+      // ÉTAPE 1 : Récupérer les IDs des gens que cet utilisateur suit
+      final followsRes = await Supabase.instance.client
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', widget.userId);
+          
+      final List followsList = followsRes as List;
+      
+      if (followsList.isEmpty) {
+        if (mounted) setState(() { all = []; loading = false; });
+        return;
+      }
 
-    if (mounted) {
-      setState(() {
-        all = (res as List).cast<Map<String, dynamic>>();
-        loading = false;
-      });
+      final List<String> followingIds = followsList.map((e) => e['following_id'].toString()).toList();
+
+      // ÉTAPE 2 : Récupérer les profils
+      final profilesRes = await Supabase.instance.client
+          .from('profiles')
+          .select('id, display_name, photo_url, avatar_url')
+          .inFilter('id', followingIds);
+
+      final formattedList = (profilesRes as List).map((profile) {
+        return {
+          'following_id': profile['id'],
+          'profiles': profile,
+        };
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          all = formattedList;
+          loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('🚨 ERREUR Following: $e');
+      if (mounted) setState(() { loading = false; });
     }
-  } catch (e) {
-    debugPrint('🚨 Erreur FollowingListPage: $e');
-    if (mounted) setState(() { loading = false; });
   }
-}
 
   @override 
   Widget build(BuildContext context) {
@@ -130,7 +145,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
                                   name, 
                                   style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))
                                 ),
-                                onTap: () => context.push('/network/profile/$fid'), // Assure-toi que la route pointe bien vers le profil
+                                onTap: () => context.push('/network/profile/$fid'),
                               );
                             },
                           ),
