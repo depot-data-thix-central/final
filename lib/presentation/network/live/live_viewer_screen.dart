@@ -64,11 +64,20 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
 
   Future<void> _initAgora() async {
     try {
+      // ✅ APPEL CORRIGÉ DE LA FUNCTION SUPABASE
       final response = await Supabase.instance.client.functions.invoke(
-        'get-agora-token',
-        body: {'channelName': widget.channelName, 'uid': 0, 'isHost': false},
+        'agora-token',
+        body: {
+          'channel': widget.channelName,
+          'uid': 0,
+        },
       );
       final data = response.data as Map<String, dynamic>;
+
+      // ✅ VÉRIFICATION DU TOKEN
+      if (data['token'] == null || data['appId'] == null) {
+        throw Exception('Token Agora invalide: $data');
+      }
 
       _engine = createAgoraRtcEngine();
       await _engine.initialize(RtcEngineContext(
@@ -107,6 +116,16 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
       debugPrint('Erreur Agora Spectateur: $e');
+      // ✅ AFFICHAGE CLAIR DE L'ERREUR DANS L'UI
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur Live : $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
     }
   }
 
