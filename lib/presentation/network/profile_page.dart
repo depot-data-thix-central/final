@@ -14,6 +14,10 @@ import 'package:thix_id/models/network_post.dart';
 import 'package:thix_id/presentation/network/widgets/post_card.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart';
 
+// Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+
 class ProfilePage extends ConsumerStatefulWidget {
   final String? userId;
   const ProfilePage({super.key, this.userId});
@@ -29,7 +33,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _isUploading = false;
   bool _isFollowLoading = false;
 
-  // Images locales (priorité sur le profil distant)
+  // Images locales (priorité sur le profil distant pendant l'upload)
   Uint8List? _localAvatarBytes;
   Uint8List? _localCoverBytes;
   String? _localAvatarUrl;
@@ -120,9 +124,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(isAvatar
-                  ? 'Photo de profil mise à jour'
-                  : 'Photo de couverture mise à jour'),
-              backgroundColor: ThixPolicy.primary,
+                  ? 'Photo de profil mise à jour avec succès'
+                  : 'Photo de couverture mise à jour avec succès'),
+              backgroundColor: ThixPolicy.success,
             ),
           );
         }
@@ -141,10 +145,109 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   // ─────────────────────────────────────────────────────────────
   // ACTIONS GALERIE PRIVÉE
   // ─────────────────────────────────────────────────────────────
-  void _uploadPrivateMedia() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ouverture de l\'explorateur pour la galerie privée...')),
+  Future<void> _uploadPrivateMedia() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.media,
+        withData: true,
+        allowMultiple: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      setState(() => _isUploading = true);
+      final ns = ref.read(networkServiceProvider);
+      final uid = ns.currentUserId;
+
+      for (var file in result.files) {
+        if (file.bytes == null) continue;
+        final ext = file.extension ?? 'jpg';
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$uid.$ext';
+        final path = '$uid/$fileName';
+        
+        // Upload dans le bucket 'private_gallery'
+        await Supabase.instance.client.storage
+            .from('private_gallery')
+            .uploadBinary(path, file.bytes!);
+            
+        final url = Supabase.instance.client.storage.from('private_gallery').getPublicUrl(path);
+        
+        // Insertion dans la table 'private_gallery'
+        await Supabase.instance.client.from('private_gallery').insert({
+          'user_id': uid,
+          'media_url': url,
+          'media_type': (ext.toLowerCase() == 'mp4' || ext.toLowerCase() == 'mov') ? 'video' : 'image',
+        });
+      }
+      
+      setState(() {}); // Rafraîchit l'interface pour afficher les nouvelles images
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Média(s) ajouté(s) à votre galerie privée !'), backgroundColor: ThixPolicy.success),
+        );
+      }
+    } catch(e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur d\'upload privé: $e'), backgroundColor: ThixPolicy.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MODIFIER LA BIO
+  // ─────────────────────────────────────────────────────────────
+  Future<void> _editBio(String currentBio) async {
+    final TextEditingController bioController = TextEditingController(text: currentBio);
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ThixPolicy.rLg)),
+        title: const Text('Modifier ma Bio', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: bioController,
+          maxLines: 4,
+          maxLength: 300,
+          decoration: InputDecoration(
+            hintText: 'Parlez un peu de vous...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, bioController.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: ThixPolicy.primary),
+            child: const Text('Enregistrer', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
+
+    if (result != null && mounted) {
+      setState(() => _isUploading = true);
+      try {
+        final uid = Supabase.instance.client.auth.currentUser!.id;
+        await Supabase.instance.client.from('profiles').update({'bio': result}).eq('id', uid);
+        ref.invalidate(userProfileProvider(uid));
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bio mise à jour avec succès'), backgroundColor: ThixPolicy.success),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: ThixPolicy.danger),
+        );
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -163,17 +266,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       } else {
         await ns.followUser(targetId);
       }
-      // Actualise les données en arrière-plan
       ref.invalidate(followStatusProvider(targetId));
       ref.invalidate(userProfileProvider(targetId));
     } catch (e) {
-      debugPrint('🚨 ERREUR LORS DU FOLLOW : $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur Follow: $e'),
-            backgroundColor: ThixPolicy.danger,
-          ),
+          SnackBar(content: Text('Erreur Follow: $e'), backgroundColor: ThixPolicy.danger),
         );
       }
     } finally {
@@ -186,9 +284,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Bloquer cet utilisateur ?'),
-        content: const Text(
-          'Vous ne verrez plus ses publications et il ne pourra plus interagir avec vous.',
-        ),
+        content: const Text('Vous ne verrez plus ses publications et il ne pourra plus interagir avec vous.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -204,15 +300,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
 
     if (ok == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Utilisateur bloqué.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Utilisateur bloqué.')));
       context.go('/network');
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  // BUILD
+  // BUILD PRINCIPAL
   // ─────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -249,22 +343,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               backgroundColor: Colors.black.withValues(alpha: 0.4),
               child: PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(ThixPolicy.rMd),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ThixPolicy.rMd)),
                 onSelected: (val) {
                   if (val == 'settings') {
                     context.push('/network/profile-settings');
                   } else if (val == 'block') {
                     _handleBlockUser(uid);
                   } else if (val == 'report') {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Signalement envoyé.')),
-                    );
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signalement envoyé.')));
                   }
                 },
                 itemBuilder: (_) => isOwn
-                    ? [const PopupMenuItem(value: 'settings', child: Text('Modifier le profil'))]
+                    ? [const PopupMenuItem(value: 'settings', child: Text('Paramètres du profil'))]
                     : [
                         const PopupMenuItem(value: 'report', child: Text('Signaler')),
                         const PopupMenuItem(value: 'block', child: Text('Bloquer', style: TextStyle(color: Colors.red))),
@@ -295,7 +385,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 
                 const SliverToBoxAdapter(child: SizedBox(height: 55)),
 
-                // ── INFO PROFIL (Nom, Profession) ──
+                // ── INFO PROFIL (Nom, Profession + Certification) ──
                 SliverToBoxAdapter(
                   child: userProfile != null ? _buildProfileInfo(userProfile) : const SizedBox(),
                 ),
@@ -322,14 +412,30 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
-                      child: Text(
-                        userProfile?['bio'] ?? 'Aucune biographie disponible.',
-                        style: ThixPolicy.bodyStyle.copyWith(height: 1.5, fontSize: 15),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            userProfile?['bio'] ?? 'Aucune biographie disponible pour le moment.',
+                            style: ThixPolicy.bodyStyle.copyWith(height: 1.5, fontSize: 15),
+                          ),
+                          if (isOwn) ...[
+                            const SizedBox(height: 24),
+                            OutlinedButton.icon(
+                              onPressed: () => _editBio(userProfile?['bio'] ?? ''),
+                              icon: const Icon(Icons.edit_note_rounded, size: 18),
+                              label: const Text('Modifier ma Bio'),
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            )
+                          ]
+                        ],
                       ),
                     ),
                   )
                 else if (_tabs[_selectedTab] == 'Galerie privée')
-                  SliverToBoxAdapter(child: _buildPrivateGallery(isOwn))
+                  SliverToBoxAdapter(child: _buildPrivateGallery(isOwn, uid))
                 else
                   postsAsync.when(
                     data: (posts) {
@@ -387,7 +493,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       );
                     },
                     loading: () => const SliverToBoxAdapter(
-                      child: Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator())),
+                      child: Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: ThixPolicy.primary))),
                     ),
                     error: (e, _) => SliverToBoxAdapter(child: Center(child: Text('Erreur: $e'))),
                   ),
@@ -399,8 +505,17 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
           if (_isUploading)
             Container(
-              color: Colors.black.withValues(alpha: 0.25),
-              child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+              color: Colors.black.withValues(alpha: 0.35),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text('Traitement en cours...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
@@ -514,15 +629,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ),
         ),
 
-        // 3. Boutons d'action (Alignés à droite)
+        // 3. Boutons d'action
         Positioned(
           bottom: -20,
           right: 16,
           child: isOwn
               ? OutlinedButton.icon(
                   onPressed: () => context.push('/network/profile-settings'),
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('Modifier'),
+                  icon: const Icon(Icons.settings_outlined, size: 16),
+                  label: const Text('Paramètres'),
                   style: OutlinedButton.styleFrom(
                     backgroundColor: ThixPolicy.surface,
                     foregroundColor: ThixPolicy.textMain,
@@ -545,7 +660,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    
                     Consumer(
                       builder: (context, ref, _) {
                         final followAsync = ref.watch(followStatusProvider(uid));
@@ -577,9 +691,17 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // INFO PROFIL
+  // INFO PROFIL AVEC BADGE DE CERTIFICATION
   // ─────────────────────────────────────────────────────────────
   Widget _buildProfileInfo(Map<String, dynamic> u) {
+    // 1. Parsing du niveau et statut de certification
+    final tier = CertificationTierX.parse(u['certification_tier']);
+    final status = CertificationStatusX.parse(u['certification_status']);
+    
+    // 2. Vérification de la validité de la certification
+    final isCertified = status == CertificationStatus.approved || 
+                        status == CertificationStatus.generated;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -593,9 +715,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   style: ThixPolicy.h2Style.copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
-              const SizedBox(width: 6),
-              if (u['is_verified'] == true) 
-                const Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 18),
+              
+              // 3. Affichage dynamique du badge
+              if (isCertified)
+                CertificationNameBadge(
+                  tier: tier,
+                  status: status,
+                  iconSize: 22, 
+                  padding: const EdgeInsets.only(left: 6),
+                )
+              else if (u['is_verified'] == true) // Fallback pour les anciens comptes
+                const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 20),
+                ),
             ],
           ),
           const SizedBox(height: 4),
@@ -623,10 +756,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       ),
       child: Row(
         children: [
-          // 👇 REDIRECTION VERS LA LISTE DES ABONNÉS
           _statTile('${u['followers_count'] ?? 0}', 'Abonnés', () => context.push('/network/followers/$uid')),
           Container(width: 1, height: 28, color: ThixPolicy.border),
-          // 👇 REDIRECTION VERS LA LISTE DES ABONNEMENTS
           _statTile('${u['following_count'] ?? 0}', 'Abonnements', () => context.push('/network/following/$uid')),
           Container(width: 1, height: 28, color: ThixPolicy.border),
           _statTile('${u['posts_count'] ?? 0}', 'Publications', () {
@@ -654,9 +785,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // GALERIE PRIVÉE UI
+  // GALERIE PRIVÉE UI (Avec fetch depuis Supabase)
   // ─────────────────────────────────────────────────────────────
-  Widget _buildPrivateGallery(bool isOwn) {
+  Widget _buildPrivateGallery(bool isOwn, String uid) {
     if (!isOwn) {
       return Padding(
         padding: const EdgeInsets.all(48),
@@ -671,40 +802,77 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          Icon(Icons.lock_person_rounded, size: 48, color: ThixPolicy.textSecondary),
-          const SizedBox(height: 12),
-          Text('Votre galerie privée', style: ThixPolicy.h3Style),
-          const SizedBox(height: 8),
-          Text(
-            'Gérez vos photos et vidéos privées ici. Vous seul y avez accès. Vous pourrez les publier plus tard si vous le souhaitez.',
-            textAlign: TextAlign.center,
-            style: ThixPolicy.bodyStyle,
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _uploadPrivateMedia,
             icon: const Icon(Icons.add_photo_alternate_rounded, color: Colors.white),
-            label: const Text('Ajouter un média', style: TextStyle(color: Colors.white)),
+            label: const Text('Ajouter à ma galerie privée', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
               backgroundColor: ThixPolicy.primary,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ThixPolicy.rFull)),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)
             ),
           ),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: ThixPolicy.surface,
-              borderRadius: BorderRadius.circular(ThixPolicy.rMd),
-              border: Border.all(color: ThixPolicy.border, style: BorderStyle.solid),
-            ),
-            child: Center(
-              child: Text('Aucun média privé pour le moment.', style: ThixPolicy.captionStyle),
-            ),
+          const SizedBox(height: 24),
+          
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: Supabase.instance.client
+                .from('private_gallery')
+                .select()
+                .eq('user_id', uid)
+                .order('created_at', ascending: false),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: ThixPolicy.primary));
+              }
+              if (snapshot.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text('Erreur de chargement de la galerie', style: ThixPolicy.captionStyle),
+                );
+              }
+              
+              final media = snapshot.data ?? [];
+              
+              if (media.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: ThixPolicy.card,
+                    borderRadius: BorderRadius.circular(ThixPolicy.rMd),
+                    border: Border.all(color: ThixPolicy.border, style: BorderStyle.solid),
+                  ),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(Icons.lock_person_rounded, size: 42, color: ThixPolicy.textSecondary.withValues(alpha: 0.5)),
+                        const SizedBox(height: 12),
+                        Text('Aucun média privé pour le moment.', style: ThixPolicy.captionStyle),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 2,
+                  mainAxisSpacing: 2,
+                ),
+                itemCount: media.length,
+                itemBuilder: (context, index) {
+                  final item = media[index];
+                  final url = item['media_url'] as String;
+                  return Image.network(url, fit: BoxFit.cover);
+                },
+              );
+            },
           )
         ],
       ),
