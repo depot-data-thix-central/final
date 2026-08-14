@@ -73,6 +73,8 @@ import 'package:thix_id/presentation/network/discover_tab.dart';
 import 'package:thix_id/presentation/network/story_viewer_screen.dart';
 import 'package:thix_id/presentation/network/comments_page.dart';
 import 'package:thix_id/presentation/network/hashtag_page.dart';
+import 'package:thix_id/presentation/network/followers_list_page.dart';
+import 'package:thix_id/presentation/network/following_list_page.dart';
 
 // === THIX MEDIA ===
 import 'package:thix_id/presentation/thix_media/create_post_page.dart';
