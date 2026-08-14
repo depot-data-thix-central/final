@@ -39,20 +39,24 @@ class CallMediaService {
   }) async {
     await _ensurePermissions(type);
 
+    // Toujours repartir propre (évite handlers empilés + preview morte)
+    if (_engine != null) {
+      await disposeEngine();
+    }
+
     final cred = await CallTokenService().getToken(channel: channel, uid: uid);
 
-    if (_engine == null) {
-      _engine = createAgoraRtcEngine();
-      await _engine!.initialize(
-        RtcEngineContext(
-          appId: cred.appId,
-          channelProfile: ChannelProfileType.channelProfileCommunication,
-        ),
-      );
-      await _engine!.enableAudio();
-      await _engine!.enableVideo();
-      await _engine!.setEnableSpeakerphone(true);
-    }
+    _engine = createAgoraRtcEngine();
+    await _engine!.initialize(
+      RtcEngineContext(
+        appId: cred.appId,
+        channelProfile: ChannelProfileType.channelProfileCommunication,
+      ),
+    );
+
+    await _engine!.enableAudio();
+    await _engine!.enableVideo();
+    await _engine!.setEnableSpeakerphone(true);
 
     _engine!.registerEventHandler(
       RtcEngineEventHandler(
