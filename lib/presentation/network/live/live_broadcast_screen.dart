@@ -76,11 +76,20 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
     try {
       if (!kIsWeb) await [Permission.camera, Permission.microphone].request();
 
+      // ✅ APPEL CORRIGÉ DE LA FUNCTION SUPABASE
       final response = await Supabase.instance.client.functions.invoke(
-        'get-agora-token',
-        body: {'channelName': widget.channelName, 'uid': 0, 'isHost': true},
+        'agora-token',
+        body: {
+          'channel': widget.channelName,
+          'uid': 0,
+        },
       );
       final data = response.data as Map<String, dynamic>;
+
+      // ✅ VÉRIFICATION DU TOKEN
+      if (data['token'] == null || data['appId'] == null) {
+        throw Exception('Token Agora invalide: $data');
+      }
 
       _engine = createAgoraRtcEngine();
       await _engine.initialize(RtcEngineContext(
@@ -124,6 +133,16 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
       debugPrint('Erreur Agora: $e');
+      // ✅ AFFICHAGE CLAIR DE L'ERREUR DANS L'UI
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur Live : $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
     }
   }
 
@@ -142,17 +161,16 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
         _handleCoHostRequest(payload['userId'], payload['userName']);
       })
       .onPresenceSync((_) {
-  final state = _realtimeChannel!.presenceState();
-  final int count = state.length;
-  
-  setState(() => _viewerCount = count > 0 ? count - 1 : 0); // On s'exclut du comptage
-})
-.subscribe((status, [error]) {
-  if (status == RealtimeSubscribeStatus.subscribed) {
-    _realtimeChannel!.track({'user_id': _myUserId, 'is_host': true});
-  }
-});
-
+        final state = _realtimeChannel!.presenceState();
+        final int count = state.length;
+        
+        setState(() => _viewerCount = count > 0 ? count - 1 : 0); // On s'exclut du comptage
+      })
+      .subscribe((status, [error]) {
+        if (status == RealtimeSubscribeStatus.subscribed) {
+          _realtimeChannel!.track({'user_id': _myUserId, 'is_host': true});
+        }
+      });
   }
 
   // ─── GESTION DES CO-HÔTES ───
