@@ -22,25 +22,32 @@ class _FollowingListPageState extends State<FollowingListPage> {
   }
 
   Future<void> load() async {
-    setState(() { loading = true; });
-    try {
-      // ✅ CORRECTION : Utilisation de !following_id pour la jointure
-      final res = await Supabase.instance.client
-          .from('follows')
-          .select('following_id, profiles!following_id(id, display_name, photo_url, avatar_url)')
-          .eq('follower_id', widget.userId);
-          
-      if (mounted) {
-        setState(() {
-          all = (res as List).cast<Map<String, dynamic>>();
-          loading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('🚨 Erreur FollowingListPage: $e'); // Permet de voir l'erreur dans la console
-      if (mounted) setState(() { loading = false; });
+  setState(() { loading = true; });
+  try {
+    final res = await Supabase.instance.client
+        .from('follows')
+        .select('''
+          following_id,
+          profiles!follows_following_id_fkey (
+            id,
+            display_name,
+            photo_url,
+            avatar_url
+          )
+        ''')
+        .eq('follower_id', widget.userId);
+
+    if (mounted) {
+      setState(() {
+        all = (res as List).cast<Map<String, dynamic>>();
+        loading = false;
+      });
     }
+  } catch (e) {
+    debugPrint('🚨 Erreur FollowingListPage: $e');
+    if (mounted) setState(() { loading = false; });
   }
+}
 
   @override 
   Widget build(BuildContext context) {
