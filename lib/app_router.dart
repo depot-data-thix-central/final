@@ -27,6 +27,7 @@ import 'package:thix_id/presentation/enterprise/enterprise_dashboard_shell_page.
 import 'package:thix_id/presentation/vault/document_vault_page.dart';
 import 'package:thix_id/presentation/settings/settings_page.dart';
 import 'package:thix_id/presentation/common/main_app_shell.dart';
+import 'package:thix_id/presentation/certification/certification_tiers_page.dart';
 
 // === THIX CHAT ===
 import 'package:thix_id/models/chat/chat_conversation.dart';
@@ -589,6 +590,13 @@ class AppRouter {
         ]),
 
         // === OTHER SPREAD ROUTES (Education, Money, Weeding) ===
+        GoRoute(
+  path: AppRoutes.certification,
+  name: 'certification',
+  pageBuilder: (_, __) => const NoTransitionPage(
+    child: CertificationTiersPage(),
+  ),
+),
         ...educationRoutes,
         ...instructorRoutes,
         ...ThixMoneyRouter.routes,
