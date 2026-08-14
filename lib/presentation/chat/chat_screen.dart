@@ -79,33 +79,29 @@ class ChatMsgNotifier extends StateNotifier<List<ChatMessage>> {
   }
 
   void upsertRealtime(List<ChatMessage> updated) {
-    var current = [...state];
-    var changed = false;
+  if (updated.isEmpty) return;
 
-    for (final msg in updated) {
-      final idx = current.indexWhere((m) => m.id == msg.id);
-      if (idx != -1) {
-        current[idx] = msg;
-        changed = true;
-      } else if (!msg.isDeleted) {
-        current.insert(0, msg);
-        changed = true;
-      }
-    }
+  var current = [...state];
+  var changed = false;
 
-    if (changed) {
-      current.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      state = current;
+  for (final msg in updated) {
+    final idx = current.indexWhere((m) => m.id == msg.id);
+    if (idx != -1) {
+      current[idx] = msg;
+      changed = true;
+    } else if (!msg.isDeleted) {
+      current.insert(0, msg);
+      changed = true;
     }
   }
 
-  void addLocal(ChatMessage msg) {
-    if (!state.any((m) => m.id == msg.id)) {
-      final current = [msg, ...state]
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      state = current;
-    }
+  if (changed) {
+    current.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final seen = <String>{};
+    current = current.where((m) => seen.add(m.id)).toList();
+    state = current;
   }
+}
 
   void removeLocal(String id) {
     state = state.where((m) => m.id != id).toList();
@@ -395,24 +391,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   }
 
   void _subscribeToRealtime() {
-    _messageSub = _chatService.subscribeToMessages(widget.conversationId).listen((updated) {
-      ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime(updated);
-      _markAsRead();
+  _messageSub = _chatService.subscribeToMessages(widget.conversationId).listen((updated) {
+    ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime(updated);
 
-      // Livré = destinataire a reçu le message
-      final me = _chatService.currentUserId;
-      for (final m in updated) {
-        if (m.senderId != me && !m.isDelivered && !m.isDeleted) {
-          unawaited(
-            Supabase.instance.client.from('messages').update({
-              'is_delivered': true,
-            }).eq('id', m.id).eq('is_delivered', false),
-          );
-        }
+    final me = _chatService.currentUserId;
+
+    // 1. Marquer LIVRÉ (orange) tout de suite
+    for (final m in updated) {
+      if (m.senderId != me && !m.isDelivered && !m.isDeleted) {
+        unawaited(
+          Supabase.instance.client.from('messages').update({
+            'is_delivered': true,
+          }).eq('id', m.id).eq('is_delivered', false),
+        );
       }
-    });
-  }
+    }
 
+    // 2. Marquer LU (rouge) avec un petit délai
+    //    pour laisser le temps à l’orange d’apparaître chez l’expéditeur
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) _markAsRead();
+    });
+  });
+}
   void _subscribeToTyping() {
     final cur = _chatService.currentUserId;
     if (cur.isEmpty) return;
