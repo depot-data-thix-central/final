@@ -49,7 +49,6 @@ class _CertificationTiersPageState
     final rateAsync = ref.watch(usdCdfRateProvider);
 
     return Scaffold(
-      // Fond clair type affiche, pas noir
       backgroundColor: const Color(0xFFF4F6FA),
       body: certAsync.when(
         loading: () => const Center(
@@ -59,8 +58,7 @@ class _CertificationTiersPageState
         data: (info) => CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // ── Header ──
-            baseiverToBoxAdapter(child: _Header(info: info)),
+            SliverToBoxAdapter(child: _Header(info: info)),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               sliver: SliverList(
@@ -71,14 +69,13 @@ class _CertificationTiersPageState
                     error: (_, __) => const SizedBox.shrink(),
                   ),
                   const SizedBox(height: 14),
-                  // Carte unique type affiche (4 niveaux)
                   _CertificationBoard(
                     current: info,
                     rate: rateAsync.valueOrNull,
                     onRequest: _requestTier,
                   ),
                   const SizedBox(height: 16),
-                  _FooterNote(),
+                  const _FooterNote(),
                 ]),
               ),
             ),
@@ -168,7 +165,7 @@ class _Header extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              'Secure Identity. Trusted Future.',
+              'Abonnement mensuel · Secure Identity. Trusted Future.',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.7),
                 fontSize: 13,
@@ -177,7 +174,6 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          // Statut actuel
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Container(
@@ -319,7 +315,7 @@ class _RateBanner extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BOARD — 4 niveaux (forme affiche)
+// BOARD — 4 niveaux
 // ═══════════════════════════════════════════════════════════════
 
 class _CertificationBoard extends StatelessWidget {
@@ -337,7 +333,6 @@ class _CertificationBoard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        // Bleu nuit doux — plus le noir plat
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -365,9 +360,8 @@ class _CertificationBoard extends StatelessWidget {
             current: current,
             rate: rate,
             onRequest: onRequest,
-            extraLines: const [],
           ),
-          _DividerLine(),
+          const _DividerLine(),
           _TierRow(
             tier: CertificationTier.premium,
             current: current,
@@ -380,21 +374,19 @@ class _CertificationBoard extends StatelessWidget {
               'Accès à la monétisation des contenus et services.',
             ],
           ),
-          _DividerLine(),
+          const _DividerLine(),
           _TierRow(
             tier: CertificationTier.enterprise,
             current: current,
             rate: rate,
             onRequest: onRequest,
-            extraLines: const [],
           ),
-          _DividerLine(),
+          const _DividerLine(),
           _TierRow(
             tier: CertificationTier.official,
             current: current,
             rate: rate,
             onRequest: onRequest,
-            extraLines: const [],
           ),
         ],
       ),
@@ -403,6 +395,8 @@ class _CertificationBoard extends StatelessWidget {
 }
 
 class _DividerLine extends StatelessWidget {
+  const _DividerLine();
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -417,7 +411,7 @@ class _DividerLine extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// LIGNE D’UN NIVEAU (sceau + textes)
+// LIGNE D’UN NIVEAU
 // ═══════════════════════════════════════════════════════════════
 
 class _TierRow extends StatelessWidget {
@@ -455,7 +449,8 @@ class _TierRow extends StatelessWidget {
         CertificationTier.standard => 'COMPTE STANDARD',
         CertificationTier.premium => 'COMPTE PREMIUM',
         CertificationTier.enterprise => 'COMPTE ENTREPRISE',
-        CertificationTier.official => 'RÉSERVÉ AUX OFFICIELS,\nEXCELLENCE, INSTITUTIONS',
+        CertificationTier.official =>
+          'RÉSERVÉ AUX OFFICIELS,\nEXCELLENCE, INSTITUTIONS',
       };
 
   String get _body => switch (tier) {
@@ -467,6 +462,13 @@ class _TierRow extends StatelessWidget {
           'Pour les organisations et entreprises.\nGestion d\'équipe, contrôle avancé\net solutions sur mesure.',
         CertificationTier.official =>
           'Pour les entités officielles et les\ninstitutions de confiance.\nNiveau d\'accès le plus élevé\net certification renforcée.',
+      };
+
+  IconData get _titleIcon => switch (tier) {
+        CertificationTier.standard => Icons.person_rounded,
+        CertificationTier.premium => Icons.star_rounded,
+        CertificationTier.enterprise => Icons.business_center_rounded,
+        CertificationTier.official => Icons.shield_rounded,
       };
 
   @override
@@ -484,14 +486,12 @@ class _TierRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Sceau type image
               _SealBadge(color: color, active: active),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Titre + badges
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -518,9 +518,9 @@ class _TierRow extends StatelessWidget {
                         runSpacing: 4,
                         children: [
                           if (showGeneratedBadge)
-                            _Chip(label: 'GÉNÉRÉ', color: const Color(0xFFD4A017)),
-                          if (_isCurrent)
-                            _Chip(label: 'ACTUEL', color: color),
+                            const _Chip(
+                                label: 'GÉNÉRÉ', color: Color(0xFFD4A017)),
+                          if (_isCurrent) _Chip(label: 'ACTUEL', color: color),
                         ],
                       ),
                     ],
@@ -534,7 +534,6 @@ class _TierRow extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    // Lignes extra (monétisation Premium)
                     ...extraLines.map(
                       (l) => Padding(
                         padding: const EdgeInsets.only(top: 4),
@@ -560,11 +559,11 @@ class _TierRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Prix + action
                     Row(
                       children: [
                         Expanded(
-                          child: _PriceLine(tier: tier, rate: rate, color: color),
+                          child:
+                              _PriceLine(tier: tier, rate: rate, color: color),
                         ),
                         const SizedBox(width: 8),
                         _ActionBtn(
@@ -588,13 +587,6 @@ class _TierRow extends StatelessWidget {
       ),
     );
   }
-
-  IconData get _titleIcon => switch (tier) {
-        CertificationTier.standard => Icons.person_rounded,
-        CertificationTier.premium => Icons.star_rounded,
-        CertificationTier.enterprise => Icons.business_center_rounded,
-        CertificationTier.official => Icons.shield_rounded,
-      };
 }
 
 class _Chip extends StatelessWidget {
@@ -653,7 +645,7 @@ class _PriceLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${usd.toStringAsFixed(0)} USD',
+          '${usd.toStringAsFixed(0)} USD / mois',
           style: TextStyle(
             color: color,
             fontSize: 15,
@@ -661,7 +653,7 @@ class _PriceLine extends StatelessWidget {
           ),
         ),
         Text(
-          '≈ $cdf',
+          '≈ $cdf / mois',
           style: TextStyle(
             color: Colors.white.withOpacity(0.65),
             fontSize: 11.5,
@@ -701,7 +693,7 @@ class _ActionBtn extends StatelessWidget {
       bg = const Color(0xFFDC2626).withOpacity(0.2);
       fg = const Color(0xFFFCA5A5);
     } else if (isCertified) {
-      label = 'Certifié';
+      label = 'Actif';
       bg = const Color(0xFF22C55E).withOpacity(0.2);
       fg = const Color(0xFF86EFAC);
     } else if (isPending) {
@@ -709,7 +701,7 @@ class _ActionBtn extends StatelessWidget {
       bg = const Color(0xFFF59E0B).withOpacity(0.2);
       fg = const Color(0xFFFCD34D);
     } else if (canRequest) {
-      label = 'Payer';
+      label = 'S\'abonner';
       bg = color;
       fg = Colors.white;
     } else {
@@ -737,7 +729,7 @@ class _ActionBtn extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SCEAU (forme certification)
+// SCEAU
 // ═══════════════════════════════════════════════════════════════
 
 class _SealBadge extends StatelessWidget {
@@ -753,7 +745,6 @@ class _SealBadge extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Halo
           if (active)
             Container(
               width: 64,
@@ -769,7 +760,6 @@ class _SealBadge extends StatelessWidget {
                 ],
               ),
             ),
-          // Anneau dentelé (approximation visuelle du sceau)
           Container(
             width: 58,
             height: 58,
@@ -787,7 +777,6 @@ class _SealBadge extends StatelessWidget {
               ),
             ),
           ),
-          // Cercle intérieur
           Container(
             width: 42,
             height: 42,
@@ -855,6 +844,8 @@ class _MiniSeal extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _FooterNote extends StatelessWidget {
+  const _FooterNote();
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -872,9 +863,10 @@ class _FooterNote extends StatelessWidget {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Standard 3\$ et Premium 7\$ : activés automatiquement après paiement. '
-              'Entreprise 30\$ : soumis à validation admin. '
-              'Officiel : sur invitation THIX uniquement. '
+              'Abonnement mensuel. '
+              'Standard 3\$/mois et Premium 7\$/mois : activés après paiement. '
+              'Entreprise 30\$/mois : validation admin. '
+              'Officiel : sur invitation THIX. '
               'Premium inclut l\'accès à la monétisation.',
               style: TextStyle(
                 fontSize: 12,
