@@ -716,11 +716,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 ),
               ),
               
-              // 3. Affichage dynamique du badge
+              // 3. Affichage dynamique du badge avec showLabel: false
               if (isCertified)
                 CertificationNameBadge(
                   tier: tier,
                   status: status,
+                  showLabel: false, // ✅ Ajouté comme demandé (sceau seul)
                   iconSize: 22, 
                   padding: const EdgeInsets.only(left: 6),
                 )
