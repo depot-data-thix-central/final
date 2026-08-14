@@ -22,32 +22,49 @@ class _FollowersListPageState extends State<FollowersListPage> {
   }
 
   Future<void> load() async {
-  setState(() { loading = true; });
-  try {
-    final res = await Supabase.instance.client
-        .from('follows')
-        .select('''
-          follower_id,
-          profiles!follows_follower_id_fkey (
-            id,
-            display_name,
-            photo_url,
-            avatar_url
-          )
-        ''')
-        .eq('following_id', widget.userId);
+    setState(() { loading = true; });
+    try {
+      // ÉTAPE 1 : On récupère juste les IDs des gens qui suivent cet utilisateur
+      final followsRes = await Supabase.instance.client
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', widget.userId);
+          
+      final List followsList = followsRes as List;
+      
+      if (followsList.isEmpty) {
+        if (mounted) setState(() { all = []; loading = false; });
+        return;
+      }
 
-    if (mounted) {
-      setState(() {
-        all = (res as List).cast<Map<String, dynamic>>();
-        loading = false;
-      });
+      // On extrait la liste des IDs
+      final List<String> followerIds = followsList.map((e) => e['follower_id'].toString()).toList();
+
+      // ÉTAPE 2 : On récupère les profils correspondants (inFilter est parfait pour ça)
+      final profilesRes = await Supabase.instance.client
+          .from('profiles')
+          .select('id, display_name, photo_url, avatar_url')
+          .inFilter('id', followerIds);
+
+      // On reformate pour l'interface
+      final formattedList = (profilesRes as List).map((profile) {
+        return {
+          'follower_id': profile['id'],
+          'profiles': profile,
+        };
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          all = formattedList;
+          loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('🚨 ERREUR Followers: $e');
+      if (mounted) setState(() { loading = false; });
     }
-  } catch (e) {
-    debugPrint('🚨 Erreur FollowersListPage: $e');
-    if (mounted) setState(() { loading = false; });
   }
-}
 
   @override 
   Widget build(BuildContext context) {
@@ -130,7 +147,7 @@ class _FollowersListPageState extends State<FollowersListPage> {
                                   name, 
                                   style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))
                                 ),
-                                onTap: () => context.push('/network/profile/$fid'), // Assure-toi que la route pointe bien vers le profil
+                                onTap: () => context.push('/network/profile/$fid'),
                               );
                             },
                           ),
