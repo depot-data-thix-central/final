@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/models/certification_tier.dart';
 import 'package:thix_id/services/certification_service.dart';
+import 'package:thix_id/services/bcc_exchange_rate_service.dart';
 
 final certificationServiceProvider = Provider<CertificationService>((ref) {
   return CertificationService(Supabase.instance.client);
@@ -11,4 +12,12 @@ final certificationServiceProvider = Provider<CertificationService>((ref) {
 final myCertificationProvider =
     FutureProvider<CertificationInfo>((ref) async {
   return ref.watch(certificationServiceProvider).getMyCertification();
+});
+
+final bccRateServiceProvider = Provider<BccExchangeRateService>((ref) {
+  return BccExchangeRateService(Supabase.instance.client);
+});
+
+final usdCdfRateProvider = FutureProvider<ExchangeRateQuote>((ref) {
+  return ref.watch(bccRateServiceProvider).getUsdToCdf();
 });
