@@ -13,8 +13,6 @@ class FollowingListPage extends StatefulWidget {
 class _FollowingListPageState extends State<FollowingListPage> {
   List<Map<String, dynamic>> all = [];
   bool loading = true;
-  
-  // Variable pour stocker le texte de recherche
   String _searchQuery = '';
 
   @override 
@@ -26,9 +24,10 @@ class _FollowingListPageState extends State<FollowingListPage> {
   Future<void> load() async {
     setState(() { loading = true; });
     try {
+      // ✅ CORRECTION : Utilisation de !following_id pour la jointure
       final res = await Supabase.instance.client
           .from('follows')
-          .select('following_id, profiles!follows_following_id_fkey(id, display_name, photo_url, avatar_url)')
+          .select('following_id, profiles!following_id(id, display_name, photo_url, avatar_url)')
           .eq('follower_id', widget.userId);
           
       if (mounted) {
@@ -37,18 +36,17 @@ class _FollowingListPageState extends State<FollowingListPage> {
           loading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('🚨 Erreur FollowingListPage: $e'); // Permet de voir l'erreur dans la console
       if (mounted) setState(() { loading = false; });
     }
   }
 
   @override 
   Widget build(BuildContext context) {
-    // Filtrer la liste en fonction de la barre de recherche
     final filteredList = all.where((item) {
       final profile = item['profiles'] as Map<String, dynamic>?;
       final name = profile != null ? (profile['display_name'] ?? 'User') as String : 'User';
-      
       return name.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
@@ -65,21 +63,16 @@ class _FollowingListPageState extends State<FollowingListPage> {
       ),
       body: Column(
         children: [
-          // ─── BARRE DE RECHERCHE ───
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: TextField(
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
+              onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
                 hintText: 'Rechercher un abonnement...',
                 hintStyle: const TextStyle(color: Colors.grey),
                 prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey),
                 filled: true,
-                fillColor: const Color(0xFFF1F5F9), // Fond gris très clair
+                fillColor: const Color(0xFFF1F5F9),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(30),
                   borderSide: BorderSide.none,
@@ -88,8 +81,6 @@ class _FollowingListPageState extends State<FollowingListPage> {
               ),
             ),
           ),
-
-          // ─── LISTE FILTRÉE ───
           Expanded(
             child: loading
                 ? const Center(child: CircularProgressIndicator())
@@ -111,7 +102,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
                             itemBuilder: (context, i) {
                               final item = filteredList[i];
                               final profile = item['profiles'] as Map<String, dynamic>?;
-                              final fid = item['following_id'] as String; // Ici on récupère bien le following_id
+                              final fid = item['following_id'] as String;
                               final name = profile != null ? (profile['display_name'] ?? 'User') as String : 'User';
                               final photo = profile != null ? (profile['photo_url'] ?? profile['avatar_url']) as String? : null;
 
@@ -132,7 +123,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
                                   name, 
                                   style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))
                                 ),
-                                onTap: () => context.push('/network/member/$fid'),
+                                onTap: () => context.push('/network/profile/$fid'), // Assure-toi que la route pointe bien vers le profil
                               );
                             },
                           ),
