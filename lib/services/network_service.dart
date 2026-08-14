@@ -1,9 +1,9 @@
-import 'dart:async';
+import 'dart:async'; 
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart'; // ✅ Ajout pour la compression
+import 'package:flutter_image_compress/flutter_image_compress.dart'; 
 
 import '../models/network_post.dart';
 import '../models/network_connection.dart';
@@ -1207,68 +1207,45 @@ class NetworkService extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> getUserProfile(String userId) async {
-  final res = await _supabase
-      .from('profiles')
-      .select(
-        'id, display_name, avatar_url, cover_url, profession, bio, '
-        'certification_tier, certification_status, is_verified',
-      )
-      .eq('id', userId)
-      .maybeSingle();
+    final res = await _supabase
+        .from('profiles')
+        .select(
+          'id, display_name, avatar_url, cover_url, profession, bio, '
+          'certification_tier, certification_status, is_verified',
+        )
+        .eq('id', userId)
+        .maybeSingle();
 
-  if (res == null) return null;
+    if (res == null) return null;
 
-  try {
-    final postsCount = await _supabase
-        .from('posts')
-        .count(CountOption.exact)
-        .eq('user_id', userId);
+    try {
+      final postsCount = await _supabase
+          .from('posts')
+          .count(CountOption.exact)
+          .eq('user_id', userId);
 
-    final followersCount = await _supabase
-        .from('follows')
-        .count(CountOption.exact)
-        .eq('following_id', userId);
+      final followersCount = await _supabase
+          .from('follows')
+          .count(CountOption.exact)
+          .eq('following_id', userId);
 
-    final followingCount = await _supabase
-        .from('follows')
-        .count(CountOption.exact)
-        .eq('follower_id', userId);
+      final followingCount = await _supabase
+          .from('follows')
+          .count(CountOption.exact)
+          .eq('follower_id', userId);
 
-    return {
-      ...res,
-      'posts_count': postsCount,
-      'followers_count': followersCount,
-      'following_count': followingCount,
-    };
-  } catch (e) {
-    debugPrint('Fallback getUserProfile count: $e');
-    final posts =
-        await _supabase.from('posts').select('id').eq('user_id', userId);
-    final followers = await _supabase
-        .from('follows')
-        .select('follower_id')
-        .eq('following_id', userId);
-    final following = await _supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', userId);
-
-    return {
-      ...res,
-      'posts_count': (posts as List).length,
-      'followers_count': (followers as List).length,
-      'following_count': (following as List).length,
-    };
-  }
-}
-    
-    catch (e) {
-      // 3. Fallback de sécurité (si la version du SDK Supabase demande un traitement différent)
+      return {
+        ...res,
+        'posts_count': postsCount,
+        'followers_count': followersCount,
+        'following_count': followingCount,
+      };
+    } catch (e) {
       debugPrint('Fallback getUserProfile count: $e');
       final posts = await _supabase.from('posts').select('id').eq('user_id', userId);
       final followers = await _supabase.from('follows').select('follower_id').eq('following_id', userId);
       final following = await _supabase.from('follows').select('following_id').eq('follower_id', userId);
-      
+
       return {
         ...res,
         'posts_count': (posts as List).length,
