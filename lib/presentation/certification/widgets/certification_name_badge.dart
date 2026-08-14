@@ -5,21 +5,18 @@ import 'package:thix_id/models/certification_tier.dart';
 import 'package:thix_id/presentation/certification/providers/certification_provider.dart';
 import 'package:thix_id/services/certification_service.dart';
 
-/// Badge compact à côté du nom (Standard / Premium / Entreprise / Officiel)
+/// Sceau certification (icône seule à côté du nom)
 class CertificationNameBadge extends ConsumerWidget {
   final bool showLabel;
   final double iconSize;
   final EdgeInsetsGeometry padding;
-
-  /// Si fourni, affiche ce tier (profil public d'un autre user).
-  /// Sinon lit myCertificationProvider (utilisateur connecté).
   final CertificationTier? tier;
   final CertificationStatus? status;
 
   const CertificationNameBadge({
     super.key,
-    this.showLabel = true,
-    this.iconSize = 14,
+    this.showLabel = false,
+    this.iconSize = 18,
     this.padding = const EdgeInsets.only(left: 6),
     this.tier,
     this.status,
@@ -28,11 +25,11 @@ class CertificationNameBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (tier != null) {
-      return _Badge(
+      return _SealChip(
         tier: tier!,
         status: status ?? CertificationStatus.approved,
         showLabel: showLabel,
-        iconSize: iconSize,
+        size: iconSize,
         padding: padding,
       );
     }
@@ -45,11 +42,11 @@ class CertificationNameBadge extends ConsumerWidget {
         if (!info.isCertified && info.status != CertificationStatus.pending) {
           return const SizedBox.shrink();
         }
-        return _Badge(
+        return _SealChip(
           tier: info.tier,
           status: info.status,
           showLabel: showLabel,
-          iconSize: iconSize,
+          size: iconSize,
           padding: padding,
         );
       },
@@ -57,18 +54,18 @@ class CertificationNameBadge extends ConsumerWidget {
   }
 }
 
-class _Badge extends StatelessWidget {
+class _SealChip extends StatelessWidget {
   final CertificationTier tier;
   final CertificationStatus status;
   final bool showLabel;
-  final double iconSize;
+  final double size;
   final EdgeInsetsGeometry padding;
 
-  const _Badge({
+  const _SealChip({
     required this.tier,
     required this.status,
     required this.showLabel,
-    required this.iconSize,
+    required this.size,
     required this.padding,
   });
 
@@ -79,81 +76,108 @@ class _Badge extends StatelessWidget {
 
     return Padding(
       padding: padding,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: showLabel ? 8 : 5,
-          vertical: 3,
-        ),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.45), width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              pending ? Icons.hourglass_top_rounded : tier.icon,
-              size: iconSize,
-              color: color,
-            ),
-            if (showLabel) ...[
-              const SizedBox(width: 4),
-              Text(
-                pending ? '${tier.shortLabel}…' : tier.shortLabel,
-                style: TextStyle(
-                  color: color,
-                  fontSize: iconSize - 1,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Sceau type médaille (comme l'affiche)
+          _CertSeal(color: color, size: size, pending: pending),
+          if (showLabel) ...[
+            const SizedBox(width: 4),
+            Text(
+              pending ? '${tier.shortLabel}…' : tier.shortLabel,
+              style: TextStyle(
+                color: color,
+                fontSize: size * 0.7,
+                fontWeight: FontWeight.w800,
+                height: 1,
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
-/// Nom + badge sur une seule ligne
-class NameWithCertification extends ConsumerWidget {
-  final String name;
-  final TextStyle? nameStyle;
-  final bool showLabel;
-  final CertificationTier? tier;
-  final CertificationStatus? status;
-  final int maxLines;
+/// Médaille dentelée + check blanc (style certification THIX)
+class _CertSeal extends StatelessWidget {
+  final Color color;
+  final double size;
+  final bool pending;
 
-  const NameWithCertification({
-    super.key,
-    required this.name,
-    this.nameStyle,
-    this.showLabel = true,
-    this.tier,
-    this.status,
-    this.maxLines = 1,
+  const _CertSeal({
+    required this.color,
+    required this.size,
+    this.pending = false,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(
-            name,
-            maxLines: maxLines,
-            overflow: TextOverflow.ellipsis,
-            style: nameStyle,
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Glow
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.45),
+                  blurRadius: size * 0.25,
+                  spreadRadius: 0.5,
+                ),
+              ],
+            ),
           ),
-        ),
-        CertificationNameBadge(
-          showLabel: showLabel,
-          tier: tier,
-          status: status,
-        ),
-      ],
+          // Anneau principal (effet sceau)
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  color,
+                  Color.lerp(color, Colors.black, 0.28)!,
+                ],
+              ),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.4),
+                width: size * 0.08,
+              ),
+            ),
+          ),
+          // Cercle intérieur
+          Container(
+            width: size * 0.68,
+            height: size * 0.68,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withOpacity(0.35),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.25),
+                width: 1,
+              ),
+            ),
+          ),
+          Icon(
+            pending ? Icons.hourglass_top_rounded : Icons.check_rounded,
+            color: Colors.white,
+            size: size * 0.48,
+            shadows: [
+              Shadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 2,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
