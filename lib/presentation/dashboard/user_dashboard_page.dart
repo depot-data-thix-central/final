@@ -18,6 +18,9 @@ import 'dashboard_ui.dart';
 import 'dashboard_tabs.dart';
 import 'dashboard_editors.dart';
 
+// ✅ IMPORT DU BADGE DE CERTIFICATION
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+
 // =============================================================================
 // STATE MANAGEMENT
 // =============================================================================
@@ -538,17 +541,30 @@ class _CompactCoverHeader extends StatelessWidget {
 
                 const SizedBox(height: 8),
 
-                // Nom
-                Text(
-                  displayName.isEmpty ? 'Utilisateur' : displayName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: Color(0xFF0A1E8A),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
+                // ✅ NOM DE L'UTILISATEUR + BADGE CERTIFICATION THIX
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        displayName.isEmpty ? 'Utilisateur' : displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18, // Légèrement agrandi pour le dashboard
+                          color: Color(0xFF0A1E8A),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    // Sceau de certification (récupère automatiquement via Riverpod pour l'utilisateur courant)
+                    const CertificationNameBadge(
+                      showLabel: false, // Sceau seul
+                      iconSize: 20, // Plus grand sur le propre profil
+                      padding: EdgeInsets.only(left: 6),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 2),
