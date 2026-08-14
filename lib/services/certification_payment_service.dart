@@ -31,6 +31,12 @@ class CertificationPaymentService {
 
   String? get _uid => _client.auth.currentUser?.id;
 
+  /// Standard + Premium → auto après paiement
+  /// Entreprise → pending admin
+  /// Officiel → invitation (non payable)
+  bool _isAutoApprove(CertificationTier tier) =>
+      tier == CertificationTier.standard || tier == CertificationTier.premium;
+
   /// Démarre un paiement pour un tier (Standard / Premium / Entreprise)
   Future<CertificationPaymentResult> initiate({
     required CertificationTier tier,
@@ -90,10 +96,12 @@ class CertificationPaymentService {
     // 2. THIX Money (interne, pas de gateway)
     if (paymentMethod == 'thix_money') {
       final ok = await _payWithThixMoney(uid, amountCdf);
+      final now = DateTime.now().toUtc().toIso8601String();
+
       await _client.from('certification_payments').update({
         'status': ok ? 'paid' : 'failed',
-        'paid_at': ok ? DateTime.now().toUtc().toIso8601String() : null,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'paid_at': ok ? now : null,
+        'updated_at': now,
       }).eq('id', paymentId);
 
       if (ok) await _onPaidSuccess(uid, tier, paymentId, requestId);
@@ -106,10 +114,10 @@ class CertificationPaymentService {
       );
     }
 
-    // 3. Mobile Money / Carte → Edge Function DÉDIÉE
+    // 3. Mobile Money / Carte → Edge Function WonyaSoft dédiée
     try {
       final response = await _client.functions.invoke(
-        'process-certification-payment', // ← séparé de process-payment (Market)
+        'process-certification-payment',
         body: {
           'payment_id': paymentId,
           'user_id': uid,
@@ -125,13 +133,20 @@ class CertificationPaymentService {
 
       debugPrint('cert payment response: ${response.status} ${response.data}');
 
-      if (response.status == 200 &&
-          response.data != null &&
-          response.data['success'] == true) {
+      final data = response.data;
+      final ok = response.status == 200 &&
+          data != null &&
+          (data is Map) &&
+          data['success'] == true;
+
+      if (ok) {
+        final ref = data['transaction_id']?.toString() ??
+            data['ref_transa']?.toString();
+
         await _client.from('certification_payments').update({
           'status': 'awaiting_payment',
-          'gateway_ref': response.data['transaction_id']?.toString(),
-          'gateway_payload': response.data,
+          'gateway_ref': ref,
+          'gateway_payload': data,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         }).eq('id', paymentId);
 
@@ -140,18 +155,16 @@ class CertificationPaymentService {
           status: 'awaiting_payment',
           needsWaiting: true,
           paymentId: paymentId,
-          data: response.data is Map
-              ? Map<String, dynamic>.from(response.data as Map)
-              : null,
+          data: Map<String, dynamic>.from(data as Map),
         );
       }
 
-      final err = response.data?['error']?.toString() ??
+      final err = (data is Map ? data['error']?.toString() : null) ??
           'Échec initiation paiement certification';
 
       await _client.from('certification_payments').update({
         'status': 'failed',
-        'gateway_payload': response.data,
+        'gateway_payload': data,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', paymentId);
 
@@ -205,30 +218,43 @@ class CertificationPaymentService {
     }
   }
 
+  /// Après paiement réussi (THIX Money immédiat, ou rappel local si besoin)
+  /// - Standard + Premium → tier actif tout de suite
+  /// - Entreprise → status pending (admin)
   Future<void> _onPaidSuccess(
     String userId,
     CertificationTier tier,
     String paymentId,
     String? requestId,
   ) async {
-    // Marquer request + profil (Standard peut être auto ; Premium/Enterprise souvent review)
+    final now = DateTime.now().toUtc().toIso8601String();
+    final auto = _isAutoApprove(tier);
+
     if (requestId != null) {
       await _client.from('certification_requests').update({
-        'status': tier == CertificationTier.standard ? 'approved' : 'pending',
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'status': auto ? 'approved' : 'pending',
+        if (auto) 'reviewed_at': now,
+        'updated_at': now,
       }).eq('id', requestId);
     }
 
-    if (tier == CertificationTier.standard) {
+    if (auto) {
       await _client.from('profiles').update({
         'certification_tier': tier.value,
         'certification_status': 'approved',
-        'certified_at': DateTime.now().toUtc().toIso8601String(),
+        'certified_at': now,
       }).eq('id', userId);
+      debugPrint('✅ Auto-approved ${tier.value} for $userId');
+    } else {
+      // Entreprise : payé, en attente d'approbation admin
+      await _client.from('profiles').update({
+        'certification_status': 'pending',
+      }).eq('id', userId);
+      debugPrint('⏳ Enterprise pending admin for $userId');
     }
   }
 
-  /// Poll statut (page d'attente)
+  /// Poll statut (page d'attente Mobile Money)
   Future<String?> getPaymentStatus(String paymentId) async {
     final row = await _client
         .from('certification_payments')
