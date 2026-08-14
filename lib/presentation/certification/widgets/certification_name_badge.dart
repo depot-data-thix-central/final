@@ -6,13 +6,13 @@ import 'package:thix_id/models/certification_tier.dart';
 import 'package:thix_id/presentation/certification/providers/certification_provider.dart';
 import 'package:thix_id/services/certification_service.dart';
 
-/// Sceau certification (icône seule, sans nom à côté — taille et sobriété
-/// façon Facebook, mais avec la forme dentelée propre à THIX).
+/// Sceau certification (icône seule par défaut, ou avec le nom du niveau).
 class CertificationNameBadge extends ConsumerWidget {
   final double iconSize;
   final EdgeInsetsGeometry padding;
   final CertificationTier? tier;
   final CertificationStatus? status;
+  final bool showLabel; // ✅ Ajout du paramètre
 
   const CertificationNameBadge({
     super.key,
@@ -20,6 +20,7 @@ class CertificationNameBadge extends ConsumerWidget {
     this.padding = const EdgeInsets.only(left: 4),
     this.tier,
     this.status,
+    this.showLabel = false, // ✅ Par défaut sur 'false' (sceau seul)
   });
 
   @override
@@ -27,10 +28,9 @@ class CertificationNameBadge extends ConsumerWidget {
     if (tier != null) {
       return Padding(
         padding: padding,
-        child: _CertSeal(
+        child: _buildContent(
           tier: tier!,
           status: status ?? CertificationStatus.approved,
-          size: iconSize,
         ),
       );
     }
@@ -45,13 +45,43 @@ class CertificationNameBadge extends ConsumerWidget {
         }
         return Padding(
           padding: padding,
-          child: _CertSeal(
+          child: _buildContent(
             tier: info.tier,
             status: info.status,
-            size: iconSize,
           ),
         );
       },
+    );
+  }
+
+  /// Construit le contenu final (sceau seul, ou sceau + texte)
+  Widget _buildContent({
+    required CertificationTier tier,
+    required CertificationStatus status,
+  }) {
+    final seal = _CertSeal(
+      tier: tier,
+      status: status,
+      size: iconSize,
+    );
+
+    if (!showLabel) return seal;
+
+    // Si on veut afficher le label en plus du sceau
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        seal,
+        const SizedBox(width: 4),
+        Text(
+          tier.shortLabel,
+          style: TextStyle(
+            color: tier.badgeColor,
+            fontSize: iconSize * 0.85,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }
