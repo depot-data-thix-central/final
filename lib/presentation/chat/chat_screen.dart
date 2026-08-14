@@ -398,6 +398,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     _messageSub = _chatService.subscribeToMessages(widget.conversationId).listen((updated) {
       ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime(updated);
       _markAsRead();
+
+      // Livré = destinataire a reçu le message
+      final me = _chatService.currentUserId;
+      for (final m in updated) {
+        if (m.senderId != me && !m.isDelivered && !m.isDeleted) {
+          unawaited(
+            Supabase.instance.client.from('messages').update({
+              'is_delivered': true,
+            }).eq('id', m.id).eq('is_delivered', false),
+          );
+        }
+      }
     });
   }
 
@@ -539,7 +551,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   }
 
   Future<void> _sendMessage() async {
-    if (!_isConnectionValid) return; 
+    if (!_isConnectionValid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connexion inactive — impossible d\'envoyer.'),
+            backgroundColor: ThixPolicy.danger,
+          ),
+        );
+      }
+      return;
+    }
 
     final text = _inputController.text.trim();
     if (text.isEmpty && _selectedFiles.isEmpty && _audioBytes == null) return;
@@ -653,16 +675,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           _replyToId = '';
           _audioBytes = null;
           _localAudioPath = null;
-          _isSending = false;
           if (_isInternalNoteMode) _isInternalNoteMode = false;
         });
       }
       _scrollToBottom();
     } catch (e) {
+      debugPrint('❌ _sendMessage: $e');
       if (mounted) {
-        setState(() => _isSending = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: ThixPolicy.danger));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Envoi impossible: $e'),
+            backgroundColor: ThixPolicy.danger,
+          ),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -904,8 +932,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                           isOwn: isOwn,
                           onReply: () => setState(() => _replyToId = msg.id),
                           onDelete: () async {
-                            ref.read(chatMessagesProvider(widget.conversationId).notifier).removeLocal(msg.id);
-                            if (isOwn) try { await _chatService.deleteMessage(msg.id); } catch (_) {}
+                            if (isOwn) {
+                              try {
+                                await _chatService.deleteMessage(msg.id);
+                                ref
+                                    .read(chatMessagesProvider(widget.conversationId).notifier)
+                                    .removeLocal(msg.id);
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Suppression impossible: $e'),
+                                      backgroundColor: ThixPolicy.danger,
+                                    ),
+                                  );
+                                }
+                              }
+                            }
                           },
                           onReaction: (r) => _chatService.toggleReaction(msg.id, r),
                           replyToMessage: msg.replyToId != null ? messages.where((m) => m.id == msg.replyToId).firstOrNull : null,
