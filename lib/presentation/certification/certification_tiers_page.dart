@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart';
 import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/certification_checkout_page.dart';
 import 'package:thix_id/presentation/certification/providers/certification_provider.dart';
 import 'package:thix_id/services/bcc_exchange_rate_service.dart';
 import 'package:thix_id/services/certification_service.dart';
-import 'package:thix_id/presentation/certification/certification_checkout_page.dart'; // ✅ Import ajouté
 
 class CertificationTiersPage extends ConsumerStatefulWidget {
   const CertificationTiersPage({super.key});
@@ -19,25 +19,19 @@ class CertificationTiersPage extends ConsumerStatefulWidget {
 
 class _CertificationTiersPageState
     extends ConsumerState<CertificationTiersPage> {
-  final bool _submitting = false;
-
   Future<void> _requestTier(CertificationTier tier) async {
-    if (_submitting) return;
-
-    // Officiel : invitation uniquement
     if (tier.isInviteOnly) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             'Le niveau Officiel / Institutions est accessible uniquement sur invitation THIX.',
           ),
-          backgroundColor: ThixPolicy.danger,
+          backgroundColor: Color(0xFFDC2626),
         ),
       );
       return;
     }
 
-    // ✅ Ouvrir le checkout au lieu de demander sans payer
     final ok = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => CertificationCheckoutPage(tier: tier),
@@ -55,88 +49,69 @@ class _CertificationTiersPageState
     final rateAsync = ref.watch(usdCdfRateProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F8),
-      body: SafeArea(
-        child: certAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: ThixPolicy.primary),
-          ),
-          error: (e, _) => Center(child: Text('Erreur: $e')),
-          data: (info) => CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(child: _buildHeader(info)),
-              const SliverToBoxAdapter(child: SizedBox(height: 8)),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    // Bandeau taux
-                    rateAsync.when(
-                      data: (q) => _RateBanner(quote: q),
-                      loading: () => const SizedBox.shrink(),
-                      error: (_, __) => const SizedBox.shrink(),
-                    ),
-                    const SizedBox(height: 14),
-                    _TierCard(
-                      tier: CertificationTier.standard,
-                      current: info,
-                      rate: rateAsync.valueOrNull,
-                      submitting: _submitting,
-                      onRequest: () =>
-                          _requestTier(CertificationTier.standard),
-                    ),
-                    const SizedBox(height: 14),
-                    _TierCard(
-                      tier: CertificationTier.premium,
-                      current: info,
-                      rate: rateAsync.valueOrNull,
-                      submitting: _submitting,
-                      onRequest: () =>
-                          _requestTier(CertificationTier.premium),
-                      showGeneratedBadge:
-                          info.tier == CertificationTier.premium &&
-                              info.status == CertificationStatus.generated,
-                    ),
-                    const SizedBox(height: 14),
-                    _TierCard(
-                      tier: CertificationTier.enterprise,
-                      current: info,
-                      rate: rateAsync.valueOrNull,
-                      submitting: _submitting,
-                      onRequest: () =>
-                          _requestTier(CertificationTier.enterprise),
-                    ),
-                    const SizedBox(height: 14),
-                    _TierCard(
-                      tier: CertificationTier.official,
-                      current: info,
-                      rate: rateAsync.valueOrNull,
-                      submitting: _submitting,
-                      onRequest: () =>
-                          _requestTier(CertificationTier.official),
-                    ),
-                    const SizedBox(height: 24),
-                    _buildFooterNote(),
-                  ]),
-                ),
+      // Fond clair type affiche, pas noir
+      backgroundColor: const Color(0xFFF4F6FA),
+      body: certAsync.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: ThixPolicy.primary),
+        ),
+        error: (e, _) => Center(child: Text('Erreur: $e')),
+        data: (info) => CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // ── Header ──
+            baseiverToBoxAdapter(child: _Header(info: info)),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  rateAsync.when(
+                    data: (q) => _RateBanner(quote: q),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 14),
+                  // Carte unique type affiche (4 niveaux)
+                  _CertificationBoard(
+                    current: info,
+                    rate: rateAsync.valueOrNull,
+                    onRequest: _requestTier,
+                  ),
+                  const SizedBox(height: 16),
+                  _FooterNote(),
+                ]),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildHeader(CertificationInfo info) {
+// ═══════════════════════════════════════════════════════════════
+// HEADER
+// ═══════════════════════════════════════════════════════════════
+
+class _Header extends StatelessWidget {
+  final CertificationInfo info;
+  const _Header({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: EdgeInsets.fromLTRB(8, top + 4, 16, 18),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0B1B3A), Color(0xFF152A52)],
+          colors: [
+            Color(0xFF0A1628),
+            Color(0xFF132A4A),
+            Color(0xFF1A3A5C),
+          ],
         ),
       ),
       child: Column(
@@ -156,6 +131,7 @@ class _CertificationTiersPageState
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withOpacity(0.12)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
@@ -176,129 +152,76 @@ class _CertificationTiersPageState
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'CERTIFICATION THIX',
-            style: TextStyle(
-              color: Color(0xFFE53935),
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'CERTIFICATION THIX',
+              style: TextStyle(
+                color: Color(0xFFE53935),
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.1,
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Secure Identity. Trusted Future.',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'Secure Identity. Trusted Future.',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: info.tier.badgeColor.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: info.tier.badgeColor, width: 2),
+          const SizedBox(height: 14),
+          // Statut actuel
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: Row(
+                children: [
+                  _MiniSeal(
+                    color: info.tier.badgeColor,
+                    icon: info.tier.icon,
+                    size: 40,
                   ),
-                  child: Icon(info.tier.icon,
-                      color: info.tier.badgeColor, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Votre niveau actuel',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Votre niveau actuel',
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        info.tier.labelFr,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
+                        const SizedBox(height: 2),
+                        Text(
+                          info.tier.labelFr,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _statusColor(info.status).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    info.status.labelFr,
-                    style: TextStyle(
-                      color: _statusColor(info.status),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _statusColor(CertificationStatus s) => switch (s) {
-        CertificationStatus.approved ||
-        CertificationStatus.generated =>
-          const Color(0xFF22C55E),
-        CertificationStatus.pending => const Color(0xFFF59E0B),
-        CertificationStatus.rejected => const Color(0xFFEF4444),
-        CertificationStatus.none => Colors.white54,
-      };
-
-  Widget _buildFooterNote() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: ThixPolicy.border),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline_rounded,
-              size: 18, color: ThixPolicy.textSecondary),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Les prix sont en USD et convertis en CDF au taux du jour (BCC ou indicatif). '
-              'Standard 3\$, Premium 7\$, Entreprise 30\$. '
-              'Le niveau Officiel est accessible uniquement sur invitation THIX.',
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.4,
-                color: ThixPolicy.textSecondary,
-                fontWeight: FontWeight.w500,
+                  _StatusPill(status: info.status),
+                ],
               ),
             ),
           ),
@@ -308,9 +231,42 @@ class _CertificationTiersPageState
   }
 }
 
-// ─────────────────────────────────────────────────────────────
+class _StatusPill extends StatelessWidget {
+  final CertificationStatus status;
+  const _StatusPill({required this.status});
+
+  Color get _c => switch (status) {
+        CertificationStatus.approved ||
+        CertificationStatus.generated =>
+          const Color(0xFF22C55E),
+        CertificationStatus.pending => const Color(0xFFF59E0B),
+        CertificationStatus.rejected => const Color(0xFFEF4444),
+        CertificationStatus.none => Colors.white54,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: _c.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        status.labelFr,
+        style: TextStyle(
+          color: _c,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // BANDEAU TAUX
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 
 class _RateBanner extends StatelessWidget {
   final ExchangeRateQuote quote;
@@ -327,12 +283,21 @@ class _RateBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ThixPolicy.border),
+        border: Border.all(color: const Color(0xFFE5E9F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Icon(
-            quote.isOfficialBcc ? Icons.account_balance_rounded : Icons.currency_exchange_rounded,
+            quote.isOfficialBcc
+                ? Icons.account_balance_rounded
+                : Icons.currency_exchange_rounded,
             size: 18,
             color: ThixPolicy.primary,
           ),
@@ -353,25 +318,123 @@ class _RateBanner extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// CARTE D'UN NIVEAU
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// BOARD — 4 niveaux (forme affiche)
+// ═══════════════════════════════════════════════════════════════
 
-class _TierCard extends StatelessWidget {
+class _CertificationBoard extends StatelessWidget {
+  final CertificationInfo current;
+  final ExchangeRateQuote? rate;
+  final Future<void> Function(CertificationTier) onRequest;
+
+  const _CertificationBoard({
+    required this.current,
+    required this.rate,
+    required this.onRequest,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        // Bleu nuit doux — plus le noir plat
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF152238),
+            Color(0xFF1C2E4A),
+            Color(0xFF243B5A),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFF3A4F6A), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1A3A5C).withOpacity(0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      child: Column(
+        children: [
+          _TierRow(
+            tier: CertificationTier.standard,
+            current: current,
+            rate: rate,
+            onRequest: onRequest,
+            extraLines: const [],
+          ),
+          _DividerLine(),
+          _TierRow(
+            tier: CertificationTier.premium,
+            current: current,
+            rate: rate,
+            onRequest: onRequest,
+            showGeneratedBadge: current.tier == CertificationTier.premium &&
+                (current.status == CertificationStatus.generated ||
+                    current.status == CertificationStatus.approved),
+            extraLines: const [
+              'Accès à la monétisation des contenus et services.',
+            ],
+          ),
+          _DividerLine(),
+          _TierRow(
+            tier: CertificationTier.enterprise,
+            current: current,
+            rate: rate,
+            onRequest: onRequest,
+            extraLines: const [],
+          ),
+          _DividerLine(),
+          _TierRow(
+            tier: CertificationTier.official,
+            current: current,
+            rate: rate,
+            onRequest: onRequest,
+            extraLines: const [],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DividerLine extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: Colors.white.withOpacity(0.08),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LIGNE D’UN NIVEAU (sceau + textes)
+// ═══════════════════════════════════════════════════════════════
+
+class _TierRow extends StatelessWidget {
   final CertificationTier tier;
   final CertificationInfo current;
   final ExchangeRateQuote? rate;
-  final bool submitting;
-  final VoidCallback onRequest;
+  final Future<void> Function(CertificationTier) onRequest;
   final bool showGeneratedBadge;
+  final List<String> extraLines;
 
-  const _TierCard({
+  const _TierRow({
     required this.tier,
     required this.current,
-    required this.submitting,
+    required this.rate,
     required this.onRequest,
-    this.rate,
     this.showGeneratedBadge = false,
+    this.extraLines = const [],
   });
 
   bool get _isCurrent => current.tier == tier;
@@ -379,142 +442,194 @@ class _TierCard extends StatelessWidget {
 
   bool get _canRequest {
     if (tier.isInviteOnly) return false;
-    if (current.status == CertificationStatus.pending) return false;
+    if (current.status == CertificationStatus.pending &&
+        current.tier.rank >= tier.rank) {
+      return false;
+    }
     if (_isCurrent && current.isCertified) return false;
     if (_isLockedBelow) return false;
     return true;
   }
 
+  String get _title => switch (tier) {
+        CertificationTier.standard => 'COMPTE STANDARD',
+        CertificationTier.premium => 'COMPTE PREMIUM',
+        CertificationTier.enterprise => 'COMPTE ENTREPRISE',
+        CertificationTier.official => 'RÉSERVÉ AUX OFFICIELS,\nEXCELLENCE, INSTITUTIONS',
+      };
+
+  String get _body => switch (tier) {
+        CertificationTier.standard =>
+          'Pour les utilisateurs individuels.\nAccès aux fonctionnalités de base\net à la certification d\'identité.',
+        CertificationTier.premium =>
+          'Pour ceux qui veulent plus.\nFonctionnalités avancées,\ncertification prioritaire et\nexpérience améliorée.',
+        CertificationTier.enterprise =>
+          'Pour les organisations et entreprises.\nGestion d\'équipe, contrôle avancé\net solutions sur mesure.',
+        CertificationTier.official =>
+          'Pour les entités officielles et les\ninstitutions de confiance.\nNiveau d\'accès le plus élevé\net certification renforcée.',
+      };
+
   @override
   Widget build(BuildContext context) {
     final color = tier.badgeColor;
+    final active = _isCurrent || current.tier.rank >= tier.rank;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: _isCurrent ? color : Colors.white.withOpacity(0.08),
-          width: _isCurrent ? 2 : 1,
-        ),
-        boxShadow: [
-          if (_isCurrent)
-            BoxShadow(
-              color: color.withOpacity(0.35),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _canRequest && !submitting ? onRequest : null,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Seal(
-                  color: color,
-                  icon: tier.icon,
-                  active: _isCurrent || current.tier.rank >= tier.rank,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              tier.labelFr.toUpperCase(),
-                              style: TextStyle(
-                                color: color,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.6,
-                              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _canRequest ? () => onRequest(tier) : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Sceau type image
+              _SealBadge(color: color, active: active),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Titre + badges
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(_titleIcon, color: color, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _title,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.4,
+                              height: 1.25,
                             ),
                           ),
-                          if (showGeneratedBadge) ...[
-                            const SizedBox(width: 8),
-                            _miniBadge('GÉNÉRÉ', const Color(0xFFD4A017)),
-                          ],
-                          if (_isCurrent) ...[
-                            const SizedBox(width: 8),
-                            _miniBadge('ACTUEL', color),
-                          ],
+                        ),
+                      ],
+                    ),
+                    if (showGeneratedBadge || _isCurrent) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (showGeneratedBadge)
+                            _Chip(label: 'GÉNÉRÉ', color: const Color(0xFFD4A017)),
+                          if (_isCurrent)
+                            _Chip(label: 'ACTUEL', color: color),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        tier.descriptionFr,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
-                          fontSize: 12.5,
-                          height: 1.35,
-                          fontWeight: FontWeight.w500,
+                    ],
+                    const SizedBox(height: 6),
+                    Text(
+                      _body,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.78),
+                        fontSize: 12.2,
+                        height: 1.35,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    // Lignes extra (monétisation Premium)
+                    ...extraLines.map(
+                      (l) => Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.monetization_on_rounded,
+                                size: 14, color: color.withOpacity(0.9)),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                l,
+                                style: TextStyle(
+                                  color: color.withOpacity(0.95),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      // ── Prix ──
-                      _PriceBlock(tier: tier, rate: rate, color: color),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _ActionChip(
+                    ),
+                    const SizedBox(height: 8),
+                    // Prix + action
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PriceLine(tier: tier, rate: rate, color: color),
+                        ),
+                        const SizedBox(width: 8),
+                        _ActionBtn(
                           tier: tier,
                           canRequest: _canRequest,
                           isCurrent: _isCurrent,
                           isCertified: current.isCertified && _isCurrent,
-                          isPending:
-                              current.status == CertificationStatus.pending &&
-                                  current.tier.rank <= tier.rank,
-                          submitting: submitting,
+                          isPending: current.status ==
+                                  CertificationStatus.pending &&
+                              !_isLockedBelow,
                           color: color,
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _miniBadge(String text, Color c) {
+  IconData get _titleIcon => switch (tier) {
+        CertificationTier.standard => Icons.person_rounded,
+        CertificationTier.premium => Icons.star_rounded,
+        CertificationTier.enterprise => Icons.business_center_rounded,
+        CertificationTier.official => Icons.shield_rounded,
+      };
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Chip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: c.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: c.withOpacity(0.5), width: 1),
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.45)),
       ),
       child: Text(
-        text,
+        label,
         style: TextStyle(
-          color: c,
+          color: color,
           fontSize: 9,
           fontWeight: FontWeight.w800,
-          letterSpacing: 0.8,
+          letterSpacing: 0.6,
         ),
       ),
     );
   }
 }
 
-class _PriceBlock extends StatelessWidget {
+class _PriceLine extends StatelessWidget {
   final CertificationTier tier;
   final ExchangeRateQuote? rate;
   final Color color;
 
-  const _PriceBlock({
+  const _PriceLine({
     required this.tier,
     required this.rate,
     required this.color,
@@ -523,31 +638,17 @@ class _PriceBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (tier.isInviteOnly) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFDC2626).withOpacity(0.15),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: const Color(0xFFDC2626).withOpacity(0.4),
-          ),
-        ),
-        child: const Text(
-          'Sur invitation uniquement',
-          style: TextStyle(
-            color: Color(0xFFDC2626),
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-          ),
+      return Text(
+        'Sur invitation',
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
         ),
       );
     }
-
     final usd = tier.priceUsd ?? 0;
-    final cdfLabel = rate != null
-        ? rate!.formatCdf(usd)
-        : '… CDF';
-
+    final cdf = rate != null ? rate!.formatCdf(usd) : '… CDF';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -555,16 +656,15 @@ class _PriceBlock extends StatelessWidget {
           '${usd.toStringAsFixed(0)} USD',
           style: TextStyle(
             color: color,
-            fontSize: 18,
+            fontSize: 15,
             fontWeight: FontWeight.w900,
           ),
         ),
-        const SizedBox(height: 2),
         Text(
-          '≈ $cdfLabel',
+          '≈ $cdf',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.75),
-            fontSize: 13,
+            color: Colors.white.withOpacity(0.65),
+            fontSize: 11.5,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -573,69 +673,20 @@ class _PriceBlock extends StatelessWidget {
   }
 }
 
-class _Seal extends StatelessWidget {
-  final Color color;
-  final IconData icon;
-  final bool active;
-
-  const _Seal({
-    required this.color,
-    required this.icon,
-    required this.active,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            color.withOpacity(active ? 1 : 0.45),
-            color.withOpacity(active ? 0.75 : 0.25),
-          ],
-        ),
-        boxShadow: active
-            ? [
-                BoxShadow(
-                  color: color.withOpacity(0.45),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : null,
-        border: Border.all(
-          color: Colors.white.withOpacity(0.25),
-          width: 2,
-        ),
-      ),
-      child: Icon(
-        active ? Icons.check_rounded : icon,
-        color: Colors.white,
-        size: 26,
-      ),
-    );
-  }
-}
-
-class _ActionChip extends StatelessWidget {
+class _ActionBtn extends StatelessWidget {
   final CertificationTier tier;
   final bool canRequest;
   final bool isCurrent;
   final bool isCertified;
   final bool isPending;
-  final bool submitting;
   final Color color;
 
-  const _ActionChip({
+  const _ActionBtn({
     required this.tier,
     required this.canRequest,
     required this.isCurrent,
     required this.isCertified,
     required this.isPending,
-    required this.submitting,
     required this.color,
   });
 
@@ -646,19 +697,19 @@ class _ActionChip extends StatelessWidget {
     Color fg;
 
     if (tier.isInviteOnly) {
-      label = 'Sur invitation';
-      bg = const Color(0xFFDC2626).withOpacity(0.15);
-      fg = const Color(0xFFDC2626);
+      label = 'Invitation';
+      bg = const Color(0xFFDC2626).withOpacity(0.2);
+      fg = const Color(0xFFFCA5A5);
     } else if (isCertified) {
       label = 'Certifié';
-      bg = const Color(0xFF22C55E).withOpacity(0.15);
-      fg = const Color(0xFF22C55E);
+      bg = const Color(0xFF22C55E).withOpacity(0.2);
+      fg = const Color(0xFF86EFAC);
     } else if (isPending) {
-      label = 'En cours…';
-      bg = const Color(0xFFF59E0B).withOpacity(0.15);
-      fg = const Color(0xFFF59E0B);
+      label = 'En cours';
+      bg = const Color(0xFFF59E0B).withOpacity(0.2);
+      fg = const Color(0xFFFCD34D);
     } else if (canRequest) {
-      label = isCurrent ? 'Activer · ${tier.priceUsd!.toStringAsFixed(0)}\$' : 'Demander · ${tier.priceUsd!.toStringAsFixed(0)}\$';
+      label = 'Payer';
       bg = color;
       fg = Colors.white;
     } else {
@@ -667,34 +718,172 @@ class _ActionChip extends StatelessWidget {
       fg = Colors.white54;
     }
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCEAU (forme certification)
+// ═══════════════════════════════════════════════════════════════
+
+class _SealBadge extends StatelessWidget {
+  final Color color;
+  final bool active;
+  const _SealBadge({required this.color, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 64,
+      height: 64,
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          if (submitting && canRequest)
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          else
-            Text(
-              label,
-              style: TextStyle(
-                color: fg,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+          // Halo
+          if (active)
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withOpacity(0.55),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
             ),
+          // Anneau dentelé (approximation visuelle du sceau)
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  color.withOpacity(active ? 1 : 0.55),
+                  Color.lerp(color, Colors.black, 0.25)!,
+                ],
+              ),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.35),
+                width: 2.5,
+              ),
+            ),
+          ),
+          // Cercle intérieur
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withOpacity(0.25),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.25),
+                width: 1.5,
+              ),
+            ),
+          ),
+          Icon(
+            Icons.check_rounded,
+            color: Colors.white,
+            size: 26,
+            shadows: [
+              Shadow(
+                color: Colors.black.withOpacity(0.35),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniSeal extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final double size;
+  const _MiniSeal({
+    required this.color,
+    required this.icon,
+    this.size = 40,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [color, Color.lerp(color, Colors.black, 0.3)!],
+        ),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.4),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: size * 0.45),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FOOTER
+// ═══════════════════════════════════════════════════════════════
+
+class _FooterNote extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E9F0)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded,
+              size: 18, color: ThixPolicy.textSecondary),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Standard 3\$ et Premium 7\$ : activés automatiquement après paiement. '
+              'Entreprise 30\$ : soumis à validation admin. '
+              'Officiel : sur invitation THIX uniquement. '
+              'Premium inclut l\'accès à la monétisation.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: ThixPolicy.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         ],
       ),
     );
