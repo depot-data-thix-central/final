@@ -7,6 +7,7 @@ import 'package:thix_id/models/certification_tier.dart';
 import 'package:thix_id/presentation/certification/providers/certification_provider.dart';
 import 'package:thix_id/services/bcc_exchange_rate_service.dart';
 import 'package:thix_id/services/certification_service.dart';
+import 'package:thix_id/presentation/certification/certification_checkout_page.dart'; // ✅ Import ajouté
 
 class CertificationTiersPage extends ConsumerStatefulWidget {
   const CertificationTiersPage({super.key});
@@ -18,7 +19,7 @@ class CertificationTiersPage extends ConsumerStatefulWidget {
 
 class _CertificationTiersPageState
     extends ConsumerState<CertificationTiersPage> {
-  bool _submitting = false;
+  final bool _submitting = false;
 
   Future<void> _requestTier(CertificationTier tier) async {
     if (_submitting) return;
@@ -36,32 +37,15 @@ class _CertificationTiersPageState
       return;
     }
 
-    setState(() => _submitting = true);
+    // ✅ Ouvrir le checkout au lieu de demander sans payer
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CertificationCheckoutPage(tier: tier),
+      ),
+    );
 
-    try {
-      await ref.read(certificationServiceProvider).requestUpgrade(
-            requestedTier: tier,
-            reason: 'Demande depuis la page Certification THIX',
-          );
+    if (ok == true) {
       ref.invalidate(myCertificationProvider);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Demande ${tier.shortLabel} envoyée'),
-          backgroundColor: ThixPolicy.success,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: ThixPolicy.danger,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _submitting = false);
     }
   }
 
