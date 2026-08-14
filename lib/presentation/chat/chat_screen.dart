@@ -79,29 +79,29 @@ class ChatMsgNotifier extends StateNotifier<List<ChatMessage>> {
   }
 
   void upsertRealtime(List<ChatMessage> updated) {
-  if (updated.isEmpty) return;
+    if (updated.isEmpty) return;
 
-  var current = [...state];
-  var changed = false;
+    var current = [...state];
+    var changed = false;
 
-  for (final msg in updated) {
-    final idx = current.indexWhere((m) => m.id == msg.id);
-    if (idx != -1) {
-      current[idx] = msg;
-      changed = true;
-    } else if (!msg.isDeleted) {
-      current.insert(0, msg);
-      changed = true;
+    for (final msg in updated) {
+      final idx = current.indexWhere((m) => m.id == msg.id);
+      if (idx != -1) {
+        current[idx] = msg;
+        changed = true;
+      } else if (!msg.isDeleted) {
+        current.insert(0, msg);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      current.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final seen = <String>{};
+      current = current.where((m) => seen.add(m.id)).toList();
+      state = current;
     }
   }
-
-  if (changed) {
-    current.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final seen = <String>{};
-    current = current.where((m) => seen.add(m.id)).toList();
-    state = current;
-  }
-}
 
   void removeLocal(String id) {
     state = state.where((m) => m.id != id).toList();
@@ -391,29 +391,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   }
 
   void _subscribeToRealtime() {
-  _messageSub = _chatService.subscribeToMessages(widget.conversationId).listen((updated) {
-    ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime(updated);
+    _messageSub = _chatService.subscribeToMessages(widget.conversationId).listen((updated) {
+      ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime(updated);
 
-    final me = _chatService.currentUserId;
+      final me = _chatService.currentUserId;
 
-    // 1. Marquer LIVRÉ (orange) tout de suite
-    for (final m in updated) {
-      if (m.senderId != me && !m.isDelivered && !m.isDeleted) {
-        unawaited(
-          Supabase.instance.client.from('messages').update({
-            'is_delivered': true,
-          }).eq('id', m.id).eq('is_delivered', false),
-        );
+      // 1. Marquer LIVRÉ (orange) tout de suite
+      for (final m in updated) {
+        if (m.senderId != me && !m.isDelivered && !m.isDeleted) {
+          unawaited(
+            Supabase.instance.client.from('messages').update({
+              'is_delivered': true,
+            }).eq('id', m.id).eq('is_delivered', false),
+          );
+        }
       }
-    }
 
-    // 2. Marquer LU (rouge) avec un petit délai
-    //    pour laisser le temps à l’orange d’apparaître chez l’expéditeur
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) _markAsRead();
+      // 2. Marquer LU (rouge) avec un petit délai
+      //    pour laisser le temps à l’orange d’apparaître chez l’expéditeur
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) _markAsRead();
+      });
     });
-  });
-}
+  }
+
   void _subscribeToTyping() {
     final cur = _chatService.currentUserId;
     if (cur.isEmpty) return;
@@ -531,7 +532,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           final response = await http.get(Uri.parse(path));
           bytes = response.bodyBytes;
         } else {
-          final file = File(path); // Utilise File de dart:io (Compatible Web car on est dans le bloc else)
+          final file = File(path); 
           bytes = await file.readAsBytes();
         }
         if (mounted) {
@@ -582,7 +583,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           ephemeralDuration: _ephemeralDuration,
           replyToId: _replyToId.isEmpty ? null : _replyToId,
         );
-        ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+        // ✅ CORRIGÉ ICI
+        ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
       } 
       else if (_selectedFiles.isNotEmpty) {
         final filesToSend = List<PlatformFile>.from(_selectedFiles);
@@ -628,7 +630,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                 ephemeralDuration: _ephemeralDuration,
                 replyToId: i == 0 && _replyToId.isNotEmpty ? _replyToId : null,
               );
-              ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+              // ✅ CORRIGÉ ICI
+              ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
             }
           }
         }
@@ -655,7 +658,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
               ephemeralDuration: _ephemeralDuration,
               replyToId: _replyToId.isEmpty ? null : _replyToId,
             );
-            ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+            // ✅ CORRIGÉ ICI
+            ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
           }
         }
       } 
@@ -667,7 +671,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           isEphemeral: _isEphemeral,
           ephemeralDuration: _isEphemeral ? _ephemeralDuration : null,
         );
-        ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+        // ✅ CORRIGÉ ICI
+        ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
       }
 
       if (mounted) {
@@ -810,7 +815,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                 final msg = await _chatService.sendMessage(
                       conversationId: widget.conversationId, content: enc, replyToId: _replyToId.isEmpty ? null : _replyToId, isEphemeral: _isEphemeral, ephemeralDuration: _ephemeralDuration,
                     );
-                ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+                // ✅ CORRIGÉ ICI
+                ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
                 if (mounted) setState(() => _replyToId = '');
                 _scrollToBottom();
               } catch (e) {
