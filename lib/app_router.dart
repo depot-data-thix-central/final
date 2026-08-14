@@ -345,25 +345,41 @@ class AppRouter {
             
             // === THIX NETWORK ===
             StatefulShellBranch(routes: [
-              GoRoute(path: AppRoutes.network, name: 'network', pageBuilder: (_, __) => const NoTransitionPage(child: NetworkProHome()), routes: [
-                GoRoute(path: 'search', name: 'networkSearch', pageBuilder: (_, __) => const NoTransitionPage(child: SearchNetworkPage())),
-                GoRoute(path: 'notifications', name: 'networkNotifications', pageBuilder: (_, __) => const NoTransitionPage(child: NotificationsPage())),
-                GoRoute(path: 'messages', name: 'networkMessages', pageBuilder: (_, __) => const NoTransitionPage(child: ConversationsList())),
-                GoRoute(path: 'chat/:userId', name: 'networkChat', pageBuilder: (_, state) => NoTransitionPage(child: network_chat.ChatScreen(userId: state.pathParameters['userId']!, userName: state.extra is String ? state.extra as String : (state.extra is Map ? (state.extra as Map)['userName'] ?? 'Discussion' : 'Discussion'), userAvatar: state.extra is Map ? (state.extra as Map)['userAvatar'] : null))),
-                GoRoute(path: 'connections', name: 'networkConnections', pageBuilder: (_, __) => const NoTransitionPage(child: ConnectionsListPage())),
-                GoRoute(path: 'profile-settings', name: 'networkProfileSettings', pageBuilder: (_, __) => const NoTransitionPage(child: ProfileSettingsPage())),
-                GoRoute(path: 'blocked', name: 'networkBlockedUsers', pageBuilder: (_, __) => const NoTransitionPage(child: BlockedUsersPage())),
-                GoRoute(path: 'discover', name: 'networkDiscover', pageBuilder: (_, __) => const NoTransitionPage(child: DiscoverTab())),
-                GoRoute(path: 'communities', name: 'networkCommunities', pageBuilder: (_, __) => const NoTransitionPage(child: CommunitiesListPage())),
-                GoRoute(path: 'community/create', name: 'networkCommunityCreate', pageBuilder: (_, __) => const NoTransitionPage(child: CreateCommunityPage())),
-                GoRoute(path: 'community/:communityId', name: 'networkCommunityDetail', pageBuilder: (_, state) => NoTransitionPage(child: CommunityDetailPage(communityId: state.pathParameters['communityId']!))),
-                GoRoute(path: 'story/:storyId', name: 'networkStoryViewer', pageBuilder: (_, state) => NoTransitionPage(child: StoryViewerScreen(storyId: state.pathParameters['storyId']!))),
-                GoRoute(path: 'comments/:postId', name: 'networkComments', pageBuilder: (_, state) => NoTransitionPage(child: CommentsPage(postId: state.pathParameters['postId']!, currentProfileId: Supabase.instance.client.auth.currentUser?.id ?? ''))),
-                GoRoute(path: 'hashtag/:tag', name: 'networkHashtag', pageBuilder: (_, state) => NoTransitionPage(child: HashtagPage(tag: state.pathParameters['tag']!))),
-                GoRoute(path: 'post/:postId', name: 'networkPostDetail', pageBuilder: (_, state) => NoTransitionPage(child: PostDetailPage(postId: state.pathParameters['postId']!, currentProfileId: auth.currentUser?.id ?? ''))),
-                GoRoute(path: 'profile/:userId', name: 'networkProfile', pageBuilder: (_, state) => NoTransitionPage(child: ProfilePage(userId: state.pathParameters['userId']!))),
-              ]),
-            ]),
+  GoRoute(
+    path: AppRoutes.network, 
+    name: 'network', 
+    pageBuilder: (_, __) => const NoTransitionPage(child: NetworkProHome()), 
+    routes: [
+      GoRoute(path: 'search', name: 'networkSearch', pageBuilder: (_, __) => const NoTransitionPage(child: SearchNetworkPage())),
+      GoRoute(path: 'notifications', name: 'networkNotifications', pageBuilder: (_, __) => const NoTransitionPage(child: NotificationsPage())),
+      GoRoute(path: 'messages', name: 'networkMessages', pageBuilder: (_, __) => const NoTransitionPage(child: ConversationsList())),
+      GoRoute(path: 'chat/:userId', name: 'networkChat', pageBuilder: (_, state) => NoTransitionPage(child: network_chat.ChatScreen(userId: state.pathParameters['userId']!, userName: state.extra is String ? state.extra as String : (state.extra is Map ? (state.extra as Map)['userName'] ?? 'Discussion' : 'Discussion'), userAvatar: state.extra is Map ? (state.extra as Map)['userAvatar'] : null))),
+      GoRoute(path: 'connections', name: 'networkConnections', pageBuilder: (_, __) => const NoTransitionPage(child: ConnectionsListPage())),
+      GoRoute(path: 'profile-settings', name: 'networkProfileSettings', pageBuilder: (_, __) => const NoTransitionPage(child: ProfileSettingsPage())),
+      GoRoute(path: 'blocked', name: 'networkBlockedUsers', pageBuilder: (_, __) => const NoTransitionPage(child: BlockedUsersPage())),
+      GoRoute(path: 'discover', name: 'networkDiscover', pageBuilder: (_, __) => const NoTransitionPage(child: DiscoverTab())),
+      GoRoute(path: 'communities', name: 'networkCommunities', pageBuilder: (_, __) => const NoTransitionPage(child: CommunitiesListPage())),
+      GoRoute(path: 'community/create', name: 'networkCommunityCreate', pageBuilder: (_, __) => const NoTransitionPage(child: CreateCommunityPage())),
+      GoRoute(path: 'community/:communityId', name: 'networkCommunityDetail', pageBuilder: (_, state) => NoTransitionPage(child: CommunityDetailPage(communityId: state.pathParameters['communityId']!))),
+      GoRoute(path: 'story/:storyId', name: 'networkStoryViewer', pageBuilder: (_, state) => NoTransitionPage(child: StoryViewerScreen(storyId: state.pathParameters['storyId']!))),
+      GoRoute(path: 'comments/:postId', name: 'networkComments', pageBuilder: (_, state) => NoTransitionPage(child: CommentsPage(postId: state.pathParameters['postId']!, currentProfileId: Supabase.instance.client.auth.currentUser?.id ?? ''))),
+      GoRoute(path: 'hashtag/:tag', name: 'networkHashtag', pageBuilder: (_, state) => NoTransitionPage(child: HashtagPage(tag: state.pathParameters['tag']!))),
+      GoRoute(path: 'post/:postId', name: 'networkPostDetail', pageBuilder: (_, state) => NoTransitionPage(child: PostDetailPage(postId: state.pathParameters['postId']!, currentProfileId: auth.currentUser?.id ?? ''))),
+      GoRoute(path: 'profile/:userId', name: 'networkProfile', pageBuilder: (_, state) => NoTransitionPage(child: ProfilePage(userId: state.pathParameters['userId']!))),
+   
+      GoRoute(
+        path: 'followers/:uid', 
+        name: 'networkFollowers', 
+        pageBuilder: (_, state) => NoTransitionPage(child: FollowersListPage(userId: state.pathParameters['uid']!))
+      ),
+      GoRoute(
+        path: 'following/:uid', 
+        name: 'networkFollowing', 
+        pageBuilder: (_, state) => NoTransitionPage(child: FollowingListPage(userId: state.pathParameters['uid']!))
+      ),
+    ]
+  ),
+]),
             
             // === THIX CHAT ===
             StatefulShellBranch(routes: [
