@@ -28,15 +28,18 @@ class _CreatePostPageState extends State<CreatePostPage> {
   final TextEditingController _priceController = TextEditingController();
 
   PlatformFile? _selectedVideo;
-
   VideoPlayerController? _videoPlayerController;
   bool _isVideoInitialized = false;
 
-  // Options demandées
-  String _selectedContentType = 'Fil'; // 'Fil', 'Série', 'Film', 'Formation', etc.
-  bool _isPaid = false; // Gratuit ou Payant
-  String _selectedFilter = 'Normal'; // Filtre esthétique appliqué
+  // ── Épisodes (uniquement pour le format "Série") ──
+  final List<PlatformFile> _episodeFiles = [];
+
+  String _selectedContentType = 'Fil'; // 'Fil', 'Série', 'NOVA Originals', etc.
+  bool _isPaid = false;
+  String _selectedFilter = 'Normal';
   final List<String> _filters = ['Normal', 'Cinématique', 'Éclat', 'Vintage', 'Cyberpunk', 'Beauté Douce'];
+
+  bool get _isSeries => _selectedContentType == 'Série';
 
   bool _isUploading = false;
   double _progress = 0.0;
@@ -88,6 +91,18 @@ class _CreatePostPageState extends State<CreatePostPage> {
     }
   }
 
+  // ── Ajouter un ou plusieurs fichiers d'épisode ──
+  Future<void> _pickEpisodes() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.video, withData: true, allowMultiple: true);
+    if (result != null && result.files.isNotEmpty) {
+      setState(() => _episodeFiles.addAll(result.files));
+    }
+  }
+
+  void _removeEpisode(int index) {
+    setState(() => _episodeFiles.removeAt(index));
+  }
+
   // Simulation ouverture caméra avec filtres beauté
   void _openCameraWithBeautyFilters() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -136,14 +151,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
       );
 
       // Note: la couverture n'est plus fournie manuellement — MediaService
-      // doit générer une miniature automatiquement (ex: première frame de
-      // la vidéo côté serveur/RPC) ou laisser coverUrl vide.
-      // Tu peux stocker _isPaid et price dans ta table Supabase si tu as
-      // ajouté les colonnes correspondantes.
+      // génère une miniature automatiquement depuis la vidéo principale.
+      // Les épisodes additionnels (format Série) sont uploadés et stockés
+      // dans episodesUrls. Tu peux stocker _isPaid et price dans ta table
+      // Supabase si tu as ajouté les colonnes correspondantes.
       await MediaService().insertWithFiles(
         newContent,
         videoFile: _selectedVideo,
         coverFile: null,
+        episodeFiles: _isSeries && _episodeFiles.isNotEmpty ? _episodeFiles : null,
         onProgress: (p) => setState(() => _progress = p),
       );
 
@@ -177,7 +193,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. SECTION PREVIEW & CAMERA
+            // 1. SECTION PREVIEW & CAMERA (vidéo principale / épisode 1)
             Container(
               height: 220,
               decoration: BoxDecoration(
@@ -213,6 +229,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
                               }),
                             ),
                           ),
+                          if (_isSeries)
+                            Positioned(
+                              top: 10, left: 10,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(color: kTdiaBlue, borderRadius: BorderRadius.circular(6)),
+                                child: const Text('Partie 1', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                              ),
+                            ),
                         ],
                       ),
                     )
@@ -221,7 +246,10 @@ class _CreatePostPageState extends State<CreatePostPage> {
                       children: [
                         const Icon(Icons.movie_creation_outlined, color: kTextGrey, size: 48),
                         const SizedBox(height: 12),
-                        const Text('Aucune vidéo sélectionnée', style: TextStyle(color: kTextGrey, fontSize: 13)),
+                        Text(
+                          _isSeries ? 'Aucune vidéo pour la Partie 1' : 'Aucune vidéo sélectionnée',
+                          style: const TextStyle(color: kTextGrey, fontSize: 13),
+                        ),
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -319,8 +347,107 @@ class _CreatePostPageState extends State<CreatePostPage> {
               items: ['Fil', 'Série', 'NOVA Originals', 'Musique', 'Gaming', 'Formation']
                   .map((type) => DropdownMenuItem(value: type, child: Text(type)))
                   .toList(),
-              onChanged: (val) => setState(() => _selectedContentType = val ?? 'Fil'),
+              onChanged: (val) {
+                setState(() {
+                  _selectedContentType = val ?? 'Fil';
+                  if (!_isSeries) _episodeFiles.clear();
+                });
+              },
             ),
+
+            // 4bis. GESTION DES ÉPISODES — visible uniquement si "Série"
+            if (_isSeries) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: kSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kTdiaBlue.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Épisodes de la série', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(
+                          '${_episodeFiles.length + (_selectedVideo != null ? 1 : 0)} partie(s)',
+                          style: const TextStyle(color: kTextGrey, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'La vidéo importée ci-dessus est la Partie 1. Ajoutez les parties suivantes ici.',
+                      style: TextStyle(color: kTextGrey, fontSize: 11.5, height: 1.35),
+                    ),
+                    const SizedBox(height: 14),
+
+                    if (_episodeFiles.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        decoration: BoxDecoration(color: kSurfaceLight, borderRadius: BorderRadius.circular(10)),
+                        alignment: Alignment.center,
+                        child: const Text('Aucun épisode additionnel', style: TextStyle(color: kTextGrey, fontSize: 12.5)),
+                      )
+                    else
+                      Column(
+                        children: List.generate(_episodeFiles.length, (i) {
+                          final ep = _episodeFiles[i];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(color: kSurfaceLight, borderRadius: BorderRadius.circular(10)),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 28, height: 28,
+                                  decoration: BoxDecoration(color: kTdiaBlue, borderRadius: BorderRadius.circular(8)),
+                                  alignment: Alignment.center,
+                                  child: Text('${i + 2}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Partie ${i + 2}', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                                      const SizedBox(height: 2),
+                                      Text(ep.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: kTextGrey, fontSize: 11)),
+                                    ],
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _removeEpisode(i),
+                                  child: const Icon(Icons.close_rounded, color: kTextGrey, size: 18),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ),
+
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _pickEpisodes,
+                        icon: const Icon(Icons.add_rounded, size: 18, color: kTdiaBlue),
+                        label: const Text('Ajouter un épisode', style: TextStyle(color: kTdiaBlue, fontWeight: FontWeight.w700)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: kTdiaBlue),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             const SizedBox(height: 20),
 
