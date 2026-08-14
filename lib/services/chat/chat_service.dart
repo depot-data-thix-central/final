@@ -557,38 +557,68 @@ class ChatService {
   // ============================================================
   // REALTIME
   // ============================================================
+Stream<List<ChatMessage>> subscribeToMessages(String conversationId) {
+  final controller = StreamController<List<ChatMessage>>();
+  final channel = _supabase.channel('messages:$conversationId');
 
-  Stream<List<ChatMessage>> subscribeToMessages(String conversationId) {
-    final controller = StreamController<List<ChatMessage>>();
-    final channel = _supabase.channel('messages:$conversationId');
+  channel
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'messages',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'conversation_id',
+          value: conversationId,
+        ),
+        callback: (payload) async {
+          try {
+            // ── 1. Utiliser le payload en priorité (rapide & fiable) ──
+            final raw = payload.newRecord;
+            if (raw != null && raw.isNotEmpty) {
+              final map = Map<String, dynamic>.from(raw);
 
-    channel
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'messages',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'conversation_id',
-            value: conversationId,
-          ),
-          callback: (payload) async {
-            final messages = await getMessages(conversationId);
-            if (!controller.isClosed) {
-              controller.add(messages);
+              // Enrichir le nom / avatar si possible
+              if (map['sender_id'] != null) {
+                try {
+                  final p = await _supabase
+                      .from('profiles')
+                      .select('display_name, full_name, avatar_url')
+                      .eq('id', map['sender_id'])
+                      .maybeSingle();
+                  map['sender_name'] = _resolveDisplayName(p);
+                  map['sender_avatar'] = p?['avatar_url'];
+                } catch (_) {
+                  map['sender_name'] ??= 'Utilisateur';
+                }
+              }
+
+              final msg = ChatMessage.fromJson(map);
+              if (!controller.isClosed) {
+                controller.add([msg]); // upsertRealtime gère l’ajout / la mise à jour
+              }
+              return;
             }
-          },
-        )
-        .subscribe();
+          } catch (e) {
+            debugPrint('⚠️ payload parse error: $e');
+          }
 
-    controller.onCancel = () {
-      _supabase.removeChannel(channel);
-      controller.close();
-    };
+          // ── 2. Fallback : re-fetch complet ──
+          final messages = await getMessages(conversationId);
+          if (!controller.isClosed) {
+            controller.add(messages);
+          }
+        },
+      )
+      .subscribe();
 
-    return controller.stream;
-  }
+  controller.onCancel = () {
+    _supabase.removeChannel(channel);
+    controller.close();
+  };
 
+  return controller.stream;
+}
   // ============================================================
   // ALIAS + GROUPES + PRESENCE STREAM + DELETE + UPLOAD
   // ============================================================
