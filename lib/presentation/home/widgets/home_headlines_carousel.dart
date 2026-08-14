@@ -1,11 +1,8 @@
 // lib/presentation/home/widgets/home_headlines_carousel.dart
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:thix_id/l10n/app_localizations.dart';
-import 'package:thix_id/presentation/common/notifications_sheet.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart';
-
 
 class HomeHeadlinesCarousel extends StatefulWidget {
   final PageController controller;
@@ -16,7 +13,7 @@ class HomeHeadlinesCarousel extends StatefulWidget {
   const HomeHeadlinesCarousel({
     super.key,
     required this.controller,
-    required this.uid,
+    this.uid,
     required this.onThixInfoTap,
     required this.onOpportunityTap,
   });
@@ -26,327 +23,264 @@ class HomeHeadlinesCarousel extends StatefulWidget {
 }
 
 class _HomeHeadlinesCarouselState extends State<HomeHeadlinesCarousel> {
-  late final Stream<List<Map<String, dynamic>>> _articlesStream;
-  late final Stream<List<Map<String, dynamic>>> _opportunitiesStream;
-  Stream<List<Map<String, dynamic>>>? _priorityNotifStream;
-  
-  Timer? _autoTimer;
-  int _cardCount = 0;
-  static const double _bannerHeight = 150;
+  int _currentIndex = 0;
+  bool _isAdmin = false;
+  late final Stream<List<Map<String, dynamic>>> _bannersStream;
 
   @override
   void initState() {
     super.initState();
-    final client = Supabase.instance.client;
-    
+    _checkAdminRole();
+    // Écoute en temps réel de la table "banners" (uniquement les actives)
+    _bannersStream = Supabase.instance.client
+        .from('banners')
+        .stream(primaryKey: ['id'])
+        .eq('is_active', true)
+        .order('created_at', ascending: false);
+  }
+
+  // Vérifie si l'utilisateur est admin pour afficher le bouton "Supprimer"
+  Future<void> _checkAdminRole() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
     try {
-      _articlesStream = client.from('thix_info_articles')
-          .stream(primaryKey: ['id']).eq('is_featured', true).order('created_at', ascending: false).limit(5);
-    } catch (e) {
-      _articlesStream = Stream.value(const <Map<String, dynamic>>[]);
-    }
-    
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('role, account_type')
+          .eq('id', user.id)
+          .maybeSingle();
+          
+      if (data != null && mounted) {
+        final role = (data['role'] ?? data['account_type'] ?? '').toString().toLowerCase();
+        if (role == 'admin' || role == 'entreprise' || role == 'support') {
+          setState(() => _isAdmin = true);
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Fonction pour supprimer une bannière de la base de données ET du Storage
+  Future<void> _deleteBanner(String id, String imageUrl) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ThixPolicy.surface,
+        title: const Text('Supprimer l\'annonce ?', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: const Text('Cette action est irréversible. L\'annonce sera retirée pour tout le monde.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false), 
+            child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textSecondary))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: ThixPolicy.danger),
+            onPressed: () => Navigator.pop(ctx, true), 
+            child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+          ),
+        ],
+      )
+    );
+
+    if (confirm != true) return;
+
     try {
-      _opportunitiesStream = client.from('opportunities')
-          .stream(primaryKey: ['id']).eq('is_featured', true).order('created_at', ascending: false).limit(5);
+      // 1. Supprimer de la table
+      await Supabase.instance.client.from('banners').delete().eq('id', id);
+
+      // 2. Extraire le chemin du fichier pour le supprimer du Storage
+      final uri = Uri.parse(imageUrl);
+      final segments = uri.pathSegments;
+      final bucketIndex = segments.indexOf('banners');
+      
+      if (bucketIndex != -1 && bucketIndex < segments.length - 1) {
+        final path = segments.sublist(bucketIndex + 1).join('/');
+        await Supabase.instance.client.storage.from('banners').remove([path]);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Annonce supprimée'), backgroundColor: ThixPolicy.success),
+        );
+      }
     } catch (e) {
-      _opportunitiesStream = Stream.value(const <Map<String, dynamic>>[]);
-    }
-    
-    final uid = widget.uid;
-    if (uid != null && uid.trim().isNotEmpty) {
-      try {
-        _priorityNotifStream = client.from('notifications')
-            .stream(primaryKey: ['id']).eq('user_id', uid).order('created_at', ascending: false).limit(5);
-      } catch (e) {
-        _priorityNotifStream = null;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: ThixPolicy.danger),
+        );
       }
     }
-    
-    _autoTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!widget.controller.hasClients || _cardCount <= 1) return;
-      final current = widget.controller.page?.round() ?? 0;
-      final next = (current + 1) % _cardCount;
-      widget.controller.animateToPage(next, duration: const Duration(milliseconds: 550), curve: Curves.easeInOutCubic);
-    });
-  }
-
-  @override
-  void dispose() {
-    _autoTimer?.cancel();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _priorityNotifStream,
-      builder: (context, notifSnap) {
-        final notifs = (notifSnap.data ?? const <Map<String, dynamic>>[])
-            .where((n) => (n['priority'] == true) || (n['is_priority'] == true)).toList(growable: false);
-        final priorityNotif = notifs.isEmpty ? null : notifs.first;
-        
-        return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _articlesStream,
-          builder: (context, articleSnap) {
-            final articles = articleSnap.data ?? const <Map<String, dynamic>>[];
-            
-            return StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _opportunitiesStream,
-              builder: (context, oppSnap) {
-                final opportunities = oppSnap.data ?? const <Map<String, dynamic>>[];
-                final cards = <Widget>[];
-                
-                if (priorityNotif != null) {
-                  cards.add(_HeadlineBanner(
-                    label: l10n.t('home_headline_notif_priority'),
-                    title: (priorityNotif['title'] as String?) ?? (priorityNotif['message'] as String?) ?? l10n.t('home_headline_new_notif'),
-                    imageUrl: priorityNotif['image_url'] as String?,
-                    icon: Icons.priority_high_rounded,
-                    accent: ThixPolicy.danger,
-                    height: _bannerHeight,
-                    onTap: () => NotificationsSheet.show(context),
-                  ));
-                }
-                
-                for (final a in articles) {
-                  cards.add(_HeadlineBanner(
-                    label: l10n.t('home_headline_thixinfo_label'),
-                    title: (a['title'] as String?) ?? l10n.t('home_headline_thixinfo_article'),
-                    imageUrl: a['image_url'] as String?,
-                    icon: Icons.newspaper_rounded,
-                    accent: ThixPolicy.domainInfo,
-                    height: _bannerHeight,
-                    onTap: widget.onThixInfoTap,
-                  ));
-                }
-                
-                for (final o in opportunities) {
-                  cards.add(_HeadlineBanner(
-                    label: l10n.t('home_headline_opportunity_label'),
-                    title: (o['title'] as String?) ?? l10n.t('home_headline_new_opportunity'),
-                    imageUrl: o['image_url'] as String?,
-                    icon: Icons.lightbulb_rounded,
-                    accent: ThixPolicy.domainOpportunity,
-                    height: _bannerHeight,
-                    onTap: widget.onOpportunityTap,
-                  ));
-                }
-                
-                if (cards.isEmpty) {
-                  cards.addAll([
-                    _HeadlineBanner(
-                      label: l10n.t('home_headline_thixinfo_label'),
-                      title: l10n.t('home_headline_thixinfo_default'),
-                      icon: Icons.newspaper_rounded,
-                      accent: ThixPolicy.domainInfo,
-                      height: _bannerHeight,
-                      onTap: widget.onThixInfoTap,
+      stream: _bannersStream,
+      builder: (context, snapshot) {
+        // En cas de chargement ou d'erreur
+        if (!snapshot.hasData && !snapshot.hasError) {
+          return const SizedBox(
+            height: 180, 
+            child: Center(child: CircularProgressIndicator(color: ThixPolicy.primary))
+          );
+        }
+
+        final banners = snapshot.data ?? [];
+
+        // Si aucune annonce n'est chargée dans la base de données
+        if (banners.isEmpty) {
+          return Container(
+            height: 160,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: ThixPolicy.tint,
+              borderRadius: BorderRadius.circular(ThixPolicy.rLg),
+              border: Border.all(color: ThixPolicy.border),
+            ),
+            child: const Center(
+              child: Text(
+                'Aucune annonce pour le moment', 
+                style: TextStyle(color: ThixPolicy.textSecondary, fontWeight: FontWeight.w600)
+              )
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            // Le Carrousel
+            SizedBox(
+              height: 180,
+              child: PageView.builder(
+                controller: widget.controller,
+                itemCount: banners.length,
+                onPageChanged: (idx) => setState(() => _currentIndex = idx),
+                itemBuilder: (context, index) {
+                  final banner = banners[index];
+                  final imageUrl = banner['image_url'] as String;
+                  final title = banner['title'] as String? ?? 'Annonce';
+                  final tag = banner['tag'] as String? ?? 'À la une';
+                  final id = banner['id'].toString();
+
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(ThixPolicy.rLg),
+                      color: ThixPolicy.tint,
                     ),
-                    _HeadlineBanner(
-                      label: l10n.t('home_headline_opportunity_label'),
-                      title: l10n.t('home_headline_opportunity_default'),
-                      icon: Icons.lightbulb_rounded,
-                      accent: ThixPolicy.domainOpportunity,
-                      height: _bannerHeight,
-                      onTap: widget.onOpportunityTap,
-                    )
-                  ]);
-                }
-                
-                _cardCount = cards.length;
-                
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(height: _bannerHeight, child: PageView(controller: widget.controller, children: cards)),
-                    if (cards.length > 1) ...[
-                      const SizedBox(height: 8),
-                      _CarouselDots(controller: widget.controller, count: cards.length),
-                    ]
-                  ],
-                );
-              },
-            );
-          },
+                    clipBehavior: Clip.hardEdge,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // L'image de fond depuis Supabase Storage
+                        CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.cover,
+                          errorWidget: (context, url, error) => const Center(child: Icon(Icons.broken_image, color: ThixPolicy.textSecondary)),
+                          placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: ThixPolicy.primary)),
+                        ),
+                        
+                        // Le filtre noir dégradé (pour que le texte blanc soit toujours lisible)
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.8),
+                                Colors.black.withValues(alpha: 0.2),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        // Le Tag et le Titre de la bannière (en bas)
+                        Positioned(
+                          bottom: 16,
+                          left: 16,
+                          right: 16,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: ThixPolicy.primary,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  tag.toUpperCase(),
+                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // BOUTON SUPPRIMER (Visible que pour les Admins, en haut à GAUCHE)
+                        if (_isAdmin)
+                          Positioned(
+                            top: 10,
+                            left: 10,
+                            child: GestureDetector(
+                              onTap: () => _deleteBanner(id, imageUrl),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: ThixPolicy.danger,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Les petits points d'indication
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                banners.length,
+                (index) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _currentIndex == index ? 20 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: _currentIndex == index ? ThixPolicy.gold : ThixPolicy.border,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
-    );
-  }
-}
-
-class _CarouselDots extends StatefulWidget {
-  final PageController controller;
-  final int count;
-  const _CarouselDots({required this.controller, required this.count});
-  @override State<_CarouselDots> createState() => _CarouselDotsState();
-}
-
-class _CarouselDotsState extends State<_CarouselDots> {
-  int _page = 0;
-  
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onScroll);
-  }
-  
-  void _onScroll() {
-    if (!widget.controller.hasClients) return;
-    final p = widget.controller.page?.round() ?? 0;
-    if (p != _page && mounted) setState(() => _page = p);
-  }
-  
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onScroll);
-    super.dispose();
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    final activePage = widget.count == 0 ? 0 : _page.clamp(0, widget.count - 1);
-    
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(widget.count, (i) {
-        final active = i == activePage;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: active ? 16 : 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: active ? ThixPolicy.premiumAccent : ThixPolicy.border,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-class _HeadlineBanner extends StatelessWidget {
-  final String label;
-  final String title;
-  final IconData icon;
-  final Color accent;
-  final String? imageUrl;
-  final double height;
-  final VoidCallback onTap;
-
-  const _HeadlineBanner({
-    required this.label,
-    required this.title,
-    required this.icon,
-    required this.accent,
-    required this.height,
-    this.imageUrl,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage = (imageUrl ?? '').trim().isNotEmpty;
-    
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ThixPolicy.rXl),
-        child: Container(
-          height: height,
-          decoration: BoxDecoration(color: accent.withValues(alpha: 0.10), boxShadow: ThixPolicy.shadowCard()),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (hasImage)
-                Image.network(
-                  imageUrl!.trim(),
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      color: accent.withValues(alpha: 0.10),
-                      child: Center(
-                        child: SizedBox(
-                          width: 22, height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.4, color: accent),
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (_, __, ___) => Container(
-                    color: accent.withValues(alpha: 0.14),
-                    alignment: Alignment.center,
-                    child: Icon(icon, color: accent, size: 40),
-                  ),
-                )
-              else
-                Container(
-                  color: accent.withValues(alpha: 0.14),
-                  alignment: Alignment.center,
-                  child: Icon(icon, color: accent, size: 40),
-                ),
-                
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: hasImage ? 0.55 : 0.25),
-                      ],
-                      stops: const [0.35, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-              
-              Positioned(
-                left: ThixPolicy.s16,
-                right: ThixPolicy.s16,
-                bottom: ThixPolicy.s12,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(8)),
-                      child: Text(
-                        label,
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      title,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900, height: 1.15),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              
-              Positioned(
-                right: ThixPolicy.s12,
-                top: ThixPolicy.s12,
-                child: Container(
-                  width: 30, height: 30,
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.85), shape: BoxShape.circle),
-                  child: const Icon(Icons.chevron_right_rounded, size: 18, color: ThixPolicy.textMain),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
