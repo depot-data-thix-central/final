@@ -8,7 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart';
+import '../../models/chat/chat_message.dart';
 import '../../models/chat/chat_conversation.dart';
 import 'providers/chat_list_provider.dart';
 import 'providers/presence_provider.dart';
@@ -222,6 +224,26 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
     if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) return '🎥 Vidéo';
     if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a') || raw.contains('Message audio (')) return '🎤 Message audio';
     return raw;
+  }
+
+  // ✅ 1. Indicateur de lecture "3 Lights"
+  Widget _buildReadReceipt(ChatMessage? msg, String currentUserId) {
+    if (msg == null || msg.senderId != currentUserId) return const SizedBox.shrink();
+    
+    IconData icon = Icons.check;
+    Color color = ThixPolicy.textSecondary.withValues(alpha: 0.6);
+
+    if (msg.isRead) {
+      icon = Icons.done_all_rounded;
+      color = ThixPolicy.primary; // Lu : Double check Bleu
+    } else if (msg.isDelivered) {
+      icon = Icons.done_all_rounded; // Livré : Double check Gris
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 4.0),
+      child: Icon(icon, size: 16, color: color),
+    );
   }
 
   @override
@@ -495,7 +517,7 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
     );
   }
 
-  // ─────────────────────── LISTE DES CONVERSATIONS (CORRIGÉE) ───────────────────────
+  // ─────────────────────── LISTE DES CONVERSATIONS ───────────────────────
   Widget _chatList(List<ChatConversation> list, String currentUserId, String currentUserName, Set<String> onlineUserIds) {
     if (list.isEmpty) {
       return Padding(
@@ -524,89 +546,163 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
         final otherUserId = conv.participantIds.firstWhere((id) => id != currentUserId, orElse: () => '');
         final isOnline = onlineUserIds.contains(otherUserId);
 
-        // ✅ CORRECTION BUG : Séparation stricte de l'affichage du nom
         String chatName = conv.displayName;
         String? chatAvatar = conv.displayAvatar;
 
         if (conv.isGroup) {
-          // 1. C'est un Groupe : on conserve le nom du groupe
           if (chatName.isEmpty) chatName = 'Groupe THIX';
         } else {
-          // 2. C'est un 1v1 ou une Escalade
-          // Si le backend a renvoyé NOTRE nom au lieu de celui de l'autre participant
           if (chatName.trim() == currentUserName.trim() || chatName.isEmpty) {
             chatName = 'Contact THIX (ID: ${otherUserId.length > 4 ? otherUserId.substring(0, 4) : ''})';
-            // Optionnel: réinitialiser l'avatar si c'est le nôtre
-            // chatAvatar = null; 
           }
         }
 
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _openConversation(conv),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s20, vertical: 12),
-              child: Row(
-                children: [
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 26, backgroundColor: ThixPolicy.surface,
-                        backgroundImage: chatAvatar != null && chatAvatar.isNotEmpty ? CachedNetworkImageProvider(chatAvatar) : null,
-                        child: (chatAvatar == null || chatAvatar.isEmpty) ? Text(chatName.isNotEmpty ? chatName[0].toUpperCase() : '?', style: const TextStyle(fontWeight: FontWeight.w700, color: ThixPolicy.textSecondary, fontSize: 18)) : null,
-                      ),
-                      if (!conv.isGroup && isOnline)
-                        Positioned(right: 0, bottom: 0, child: Container(width: 14, height: 14, decoration: BoxDecoration(color: ThixPolicy.success, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.5)))),
-                    ],
+        // Swipe pour Supprimer la conversation
+        return Dismissible(
+          key: ValueKey(conv.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            color: ThixPolicy.danger,
+            child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+          ),
+          confirmDismiss: (direction) async {
+            return await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: ThixPolicy.card,
+                title: const Text('Supprimer la discussion', style: TextStyle(fontWeight: FontWeight.w800)),
+                content: const Text('Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action est irréversible pour vous.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false), 
+                    child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textSecondary))
                   ),
-                  const SizedBox(width: ThixPolicy.s16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Flexible(child: Text(chatName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: unread ? FontWeight.w800 : FontWeight.w600, color: ThixPolicy.textMain))),
-                                  // Petit badge pour indiquer visuellement une escalade/groupe (Optionnel)
-                                  if (conv.isGroup) ...[
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.groups_rounded, size: 14, color: ThixPolicy.textSecondary),
-                                  ]
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(_fmt(t), style: TextStyle(fontSize: 11, fontWeight: unread ? FontWeight.w700 : FontWeight.w500, color: unread ? ThixPolicy.primary : ThixPolicy.textSecondary)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _formatPreview(last?.content),
-                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13, fontWeight: unread ? FontWeight.w600 : FontWeight.w400, color: unread ? ThixPolicy.textMain : ThixPolicy.textSecondary),
-                              ),
-                            ),
-                            if (unread)
-                              Container(
-                                margin: const EdgeInsets.only(left: 10),
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(color: ThixPolicy.primary, borderRadius: BorderRadius.circular(12)),
-                                alignment: Alignment.center,
-                                child: Text('${conv.unreadCount}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: ThixPolicy.danger),
+                    onPressed: () => Navigator.pop(ctx, true), 
+                    child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
                   ),
                 ],
+              ),
+            );
+          },
+          onDismissed: (direction) async {
+            try {
+              // Suppression du côté base de données
+              await Supabase.instance.client
+                  .from('conversation_participants')
+                  .delete()
+                  .eq('conversation_id', conv.id)
+                  .eq('user_id', currentUserId);
+                  
+              // Mise à jour de l'UI
+              ref.read(chatListProvider.notifier).refresh(silent: true);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conversation supprimée')));
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors de la suppression'), backgroundColor: ThixPolicy.danger));
+            }
+          },
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _openConversation(conv),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s20, vertical: 12),
+                child: Row(
+                  children: [
+                    Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 26, backgroundColor: ThixPolicy.surface,
+                          backgroundImage: chatAvatar != null && chatAvatar.isNotEmpty ? CachedNetworkImageProvider(chatAvatar) : null,
+                          child: (chatAvatar == null || chatAvatar.isEmpty) ? Text(chatName.isNotEmpty ? chatName[0].toUpperCase() : '?', style: const TextStyle(fontWeight: FontWeight.w700, color: ThixPolicy.textSecondary, fontSize: 18)) : null,
+                        ),
+                        if (!conv.isGroup && isOnline)
+                          Positioned(right: 0, bottom: 0, child: Container(width: 14, height: 14, decoration: BoxDecoration(color: ThixPolicy.success, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.5)))),
+                      ],
+                    ),
+                    const SizedBox(width: ThixPolicy.s16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              // Badge d'Escalade et de Groupe
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        chatName, 
+                                        maxLines: 1, 
+                                        overflow: TextOverflow.ellipsis, 
+                                        style: TextStyle(
+                                          fontSize: 15, 
+                                          fontWeight: unread ? FontWeight.w800 : FontWeight.w600, 
+                                          color: ThixPolicy.textMain
+                                        )
+                                      )
+                                    ),
+                                    if (conv.isEscalation) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: ThixPolicy.danger.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: ThixPolicy.danger.withValues(alpha: 0.35)),
+                                        ),
+                                        child: const Text(
+                                          'Escalade',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: ThixPolicy.danger,
+                                          ),
+                                        ),
+                                      ),
+                                    ] else if (conv.isGroup) ...[
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.groups_rounded, size: 14, color: ThixPolicy.textSecondary),
+                                    ]
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(_fmt(t), style: TextStyle(fontSize: 11, fontWeight: unread ? FontWeight.w700 : FontWeight.w500, color: unread ? ThixPolicy.primary : ThixPolicy.textSecondary)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              // Intégration de l'accusé de réception (3 lights)
+                              _buildReadReceipt(last, currentUserId),
+                              
+                              Expanded(
+                                child: Text(
+                                  _formatPreview(last?.content),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 13, fontWeight: unread ? FontWeight.w600 : FontWeight.w400, color: unread ? ThixPolicy.textMain : ThixPolicy.textSecondary),
+                                ),
+                              ),
+                              if (unread)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 10),
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(color: ThixPolicy.primary, borderRadius: BorderRadius.circular(12)),
+                                  alignment: Alignment.center,
+                                  child: Text('${conv.unreadCount}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -615,7 +711,7 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
     );
   }
 
-  // ─────────────────────── GLASS BOTTOM NAV (CORRIGÉE) ───────────────────────
+  // ─────────────────────── GLASS BOTTOM NAV ───────────────────────
   Widget _buildGlassBottomNav(int unread) {
     return Positioned(
       bottom: 24, left: 0, right: 0,
@@ -679,9 +775,8 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
         if (idx == 0) context.pushNamed('connections');
         // ✅ CORRECTION BUG DE BUILD WEB : Route statique à la place de l'enum non trouvé
         else if (idx == 2) {
-  Navigator.push(context, MaterialPageRoute(builder: (_) => CallHistoryPage()));
-}
-
+          Navigator.push(context, MaterialPageRoute(builder: (_) => CallHistoryPage()));
+        }
         else if (idx == 3) Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatSettingsPage()));
         else setState(() => _selectedNav = idx);
       },
