@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/models/certification_tier.dart';
 import 'package:thix_id/services/certification_service.dart';
 import 'package:thix_id/services/bcc_exchange_rate_service.dart';
+import 'package:thix_id/services/certification_payment_service.dart'; // ✅ Import ajouté
 
 final certificationServiceProvider = Provider<CertificationService>((ref) {
   return CertificationService(Supabase.instance.client);
@@ -20,4 +21,10 @@ final bccRateServiceProvider = Provider<BccExchangeRateService>((ref) {
 
 final usdCdfRateProvider = FutureProvider<ExchangeRateQuote>((ref) {
   return ref.watch(bccRateServiceProvider).getUsdToCdf();
+});
+
+// ✅ Nouveau Provider pour le service de paiement de la certification
+final certificationPaymentServiceProvider =
+    Provider<CertificationPaymentService>((ref) {
+  return CertificationPaymentService(Supabase.instance.client);
 });
