@@ -266,7 +266,7 @@ class _HomePagePremiumState extends State<HomePagePremium> {
   Future<void> _openEmergency() async {
     final auth = context.read<AuthController>();
     if (auth.isAuthenticated) {
-      context.push('/thix-urgent');
+      context.push('/thix-retrouve');
       return;
     }
     if (!mounted) return;
@@ -347,7 +347,7 @@ class _HomePagePremiumState extends State<HomePagePremium> {
       case 'thixMoney': context.push(AppRoutes.thixMoney); break;
       case 'monPays': context.push(AppRoutes.monPays); break;
       case 'reservation': context.push(AppRoutes.reservation); break;
-      case 'thixUrgent': context.push(AppRoutes.thixUrgent); break;
+      case 'thixRetrouve': context.push(AppRoutes.thixRetrouve); break;
       default: break;
     }
   }
