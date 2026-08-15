@@ -1,4 +1,6 @@
 // lib/presentation/certification/certification_tiers_page.dart
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -60,7 +62,7 @@ class _CertificationTiersPageState
           slivers: [
             SliverToBoxAdapter(child: _Header(info: info)),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   rateAsync.when(
@@ -87,7 +89,7 @@ class _CertificationTiersPageState
 }
 
 // ═══════════════════════════════════════════════════════════════
-// HEADER
+// HEADER (bannière — reste foncée pour l'identité de marque)
 // ═══════════════════════════════════════════════════════════════
 
 class _Header extends StatelessWidget {
@@ -97,8 +99,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
-    
-    // ✅ CORRECTION DE LA LOGIQUE : Si l'utilisateur n'a pas de certification active, on force "Compte Gratuit"
+
     final isFreeAccount = info.status == CertificationStatus.none;
     final displayTierName = isFreeAccount ? 'Compte Gratuit' : info.tier.labelFr;
 
@@ -320,7 +321,7 @@ class _RateBanner extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BOARD — 4 niveaux
+// BOARD — 4 niveaux, cartes claires uniformes
 // ═══════════════════════════════════════════════════════════════
 
 class _CertificationBoard extends StatelessWidget {
@@ -336,94 +337,48 @@ class _CertificationBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF152238),
-            Color(0xFF1C2E4A),
-            Color(0xFF243B5A),
+    return Column(
+      children: [
+        _TierRow(
+          tier: CertificationTier.standard,
+          current: current,
+          rate: rate,
+          onRequest: onRequest,
+        ),
+        const SizedBox(height: 12),
+        _TierRow(
+          tier: CertificationTier.premium,
+          current: current,
+          rate: rate,
+          onRequest: onRequest,
+          showGeneratedBadge: current.tier == CertificationTier.premium &&
+              (current.status == CertificationStatus.generated ||
+                  current.status == CertificationStatus.approved),
+          extraLines: const [
+            'Accès à la monétisation des contenus et services.',
           ],
         ),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFF3A4F6A), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1A3A5C).withOpacity(0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-      child: Column(
-        children: [
-          _TierRow(
-            tier: CertificationTier.standard,
-            current: current,
-            rate: rate,
-            onRequest: onRequest,
-          ),
-          const _DividerLine(),
-          
-          _TierRow(
-            tier: CertificationTier.premium,
-            current: current,
-            rate: rate,
-            onRequest: onRequest,
-            showGeneratedBadge: current.tier == CertificationTier.premium &&
-                (current.status == CertificationStatus.generated ||
-                    current.status == CertificationStatus.approved),
-            extraLines: const [
-              'Accès à la monétisation des contenus et services.',
-            ],
-          ),
-          
-          // ✅ Suppression de la Divider ici pour mettre en valeur la carte Entreprise
-          const SizedBox(height: 6),
-          
-          _TierRow(
-            tier: CertificationTier.enterprise,
-            current: current,
-            rate: rate,
-            onRequest: onRequest,
-          ),
-          
-          const SizedBox(height: 6),
-          // ✅ Suppression de la Divider ici également
-          
-          _TierRow(
-            tier: CertificationTier.official,
-            current: current,
-            rate: rate,
-            onRequest: onRequest,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DividerLine extends StatelessWidget {
-  const _DividerLine();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Divider(
-        height: 1,
-        thickness: 1,
-        color: Colors.white.withOpacity(0.08),
-      ),
+        const SizedBox(height: 12),
+        _TierRow(
+          tier: CertificationTier.enterprise,
+          current: current,
+          rate: rate,
+          onRequest: onRequest,
+        ),
+        const SizedBox(height: 12),
+        _TierRow(
+          tier: CertificationTier.official,
+          current: current,
+          rate: rate,
+          onRequest: onRequest,
+        ),
+      ],
     );
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// LIGNE D’UN NIVEAU
+// LIGNE D'UN NIVEAU — carte blanche, accent couleur par palier
 // ═══════════════════════════════════════════════════════════════
 
 class _TierRow extends StatelessWidget {
@@ -462,18 +417,18 @@ class _TierRow extends StatelessWidget {
         CertificationTier.premium => 'COMPTE PREMIUM',
         CertificationTier.enterprise => 'COMPTE ENTREPRISE',
         CertificationTier.official =>
-          'RÉSERVÉ AUX OFFICIELS,\nEXCELLENCE, INSTITUTIONS',
+          'RÉSERVÉ AUX OFFICIELS, EXCELLENCE, INSTITUTIONS',
       };
 
   String get _body => switch (tier) {
         CertificationTier.standard =>
-          'Pour les utilisateurs individuels.\nAccès aux fonctionnalités de base\net à la certification d\'identité.',
+          'Pour les utilisateurs individuels. Accès aux fonctionnalités de base et à la certification d\'identité.',
         CertificationTier.premium =>
-          'Pour ceux qui veulent plus.\nFonctionnalités avancées,\ncertification prioritaire et\nexpérience améliorée.',
+          'Pour ceux qui veulent plus. Fonctionnalités avancées, certification prioritaire et expérience améliorée.',
         CertificationTier.enterprise =>
-          'Pour les organisations et entreprises.\nGestion d\'équipe, contrôle avancé\net solutions sur mesure.',
+          'Pour les organisations et entreprises. Gestion d\'équipe, contrôle avancé et solutions sur mesure.',
         CertificationTier.official =>
-          'Pour les entités officielles et les\ninstitutions de confiance.\nNiveau d\'accès le plus élevé\net certification renforcée.',
+          'Pour les entités officielles et les institutions de confiance. Niveau d\'accès le plus élevé et certification renforcée.',
       };
 
   IconData get _titleIcon => switch (tier) {
@@ -487,40 +442,30 @@ class _TierRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = tier.badgeColor;
     final active = _isCurrent || current.tier.rank >= tier.rank;
-    
-    // ✅ DÉTECTION DU NIVEAU ENTREPRISE POUR LE DESIGN "CLAIRE PROPRE"
-    final isEnterprise = tier == CertificationTier.enterprise;
 
     return Container(
-      // Marge uniquement pour l'entreprise afin de la détacher des autres
-      margin: isEnterprise ? const EdgeInsets.symmetric(vertical: 6) : EdgeInsets.zero,
-      
-      // ✅ NOUVEAU DESIGN CLAIR ET PROPRE POUR L'ENTREPRISE
-      decoration: isEnterprise 
-          ? BoxDecoration(
-              color: const Color(0xFF1E334D), // Un fond bleu nuit uni et propre
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF4A90E2).withOpacity(0.35), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ) 
-          : null,
-          
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: _isCurrent ? color.withOpacity(0.55) : const Color(0xFFE5E9F0),
+          width: _isCurrent ? 1.6 : 1.1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: _canRequest ? () => onRequest(tier) : null,
-          borderRadius: BorderRadius.circular(isEnterprise ? 16 : 14),
+          borderRadius: BorderRadius.circular(18),
           child: Padding(
-            // Plus d'espace (padding) pour la carte Entreprise
-            padding: isEnterprise 
-                ? const EdgeInsets.all(16) 
-                : const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -540,9 +485,9 @@ class _TierRow extends StatelessWidget {
                               _title,
                               style: TextStyle(
                                 color: color,
-                                fontSize: 13.5,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w900,
-                                letterSpacing: 0.4,
+                                letterSpacing: 0.3,
                                 height: 1.25,
                               ),
                             ),
@@ -550,7 +495,7 @@ class _TierRow extends StatelessWidget {
                         ],
                       ),
                       if (showGeneratedBadge || _isCurrent) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Wrap(
                           spacing: 6,
                           runSpacing: 4,
@@ -565,38 +510,45 @@ class _TierRow extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         _body,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(isEnterprise ? 0.85 : 0.78),
+                        style: const TextStyle(
+                          color: ThixPolicy.textSecondary,
                           fontSize: 12.2,
-                          height: 1.35,
+                          height: 1.4,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                       ...extraLines.map(
                         (l) => Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(Icons.monetization_on_rounded,
-                                  size: 14, color: color.withOpacity(0.9)),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  l,
-                                  style: TextStyle(
-                                    color: color.withOpacity(0.95),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.3,
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.monetization_on_rounded,
+                                    size: 14, color: color),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  child: Text(
+                                    l,
+                                    style: TextStyle(
+                                      color: color,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.3,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
@@ -638,9 +590,9 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.18),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.45)),
+        border: Border.all(color: color.withOpacity(0.4)),
       ),
       child: Text(
         label,
@@ -693,8 +645,8 @@ class _PriceLine extends StatelessWidget {
         ),
         Text(
           '≈ $cdf / mois',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.65),
+          style: const TextStyle(
+            color: ThixPolicy.textSecondary,
             fontSize: 11.5,
             fontWeight: FontWeight.w600,
           ),
@@ -729,24 +681,24 @@ class _ActionBtn extends StatelessWidget {
 
     if (tier.isInviteOnly) {
       label = 'Invitation';
-      bg = const Color(0xFFDC2626).withOpacity(0.2);
-      fg = const Color(0xFFFCA5A5);
+      bg = const Color(0xFFDC2626).withOpacity(0.1);
+      fg = const Color(0xFFDC2626);
     } else if (isCertified) {
       label = 'Actif';
-      bg = const Color(0xFF22C55E).withOpacity(0.2);
-      fg = const Color(0xFF86EFAC);
+      bg = const Color(0xFF22C55E).withOpacity(0.12);
+      fg = const Color(0xFF16A34A);
     } else if (isPending) {
       label = 'En cours';
-      bg = const Color(0xFFF59E0B).withOpacity(0.2);
-      fg = const Color(0xFFFCD34D);
+      bg = const Color(0xFFF59E0B).withOpacity(0.12);
+      fg = const Color(0xFFB45309);
     } else if (canRequest) {
       label = 'S\'abonner';
       bg = color;
       fg = Colors.white;
     } else {
       label = 'Inclus';
-      bg = Colors.white.withOpacity(0.08);
-      fg = Colors.white54;
+      bg = const Color(0xFFF1F3F7);
+      fg = ThixPolicy.textSecondary;
     }
 
     return Container(
@@ -768,8 +720,58 @@ class _ActionBtn extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SCEAU
+// SCEAU — vraie forme scallopée (rosette de certification)
 // ═══════════════════════════════════════════════════════════════
+
+class _ScallopSealPainter extends CustomPainter {
+  final Color color;
+  final int points;
+
+  _ScallopSealPainter({required this.color, this.points = 13});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerRadius = size.width / 2;
+    final innerRadius = outerRadius * 0.86;
+
+    final path = Path();
+    final totalPoints = points * 2;
+    for (int i = 0; i < totalPoints; i++) {
+      final angle = (math.pi * 2 / totalPoints) * i - math.pi / 2;
+      final radius = i.isEven ? outerRadius : innerRadius;
+      final dx = center.dx + radius * math.cos(angle);
+      final dy = center.dy + radius * math.sin(angle);
+      if (i == 0) {
+        path.moveTo(dx, dy);
+      } else {
+        path.lineTo(dx, dy);
+      }
+    }
+    path.close();
+
+    final fillPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          Color.lerp(color, Colors.white, 0.18)!,
+          color,
+          Color.lerp(color, Colors.black, 0.28)!,
+        ],
+        stops: const [0.0, 0.55, 1.0],
+      ).createShader(Rect.fromCircle(center: center, radius: outerRadius));
+    canvas.drawPath(path, fillPaint);
+
+    final borderPaint = Paint()
+      ..color = Colors.white.withOpacity(0.45)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.025;
+    canvas.drawPath(path, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ScallopSealPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.points != points;
+}
 
 class _SealBadge extends StatelessWidget {
   final Color color;
@@ -781,65 +783,43 @@ class _SealBadge extends StatelessWidget {
     return SizedBox(
       width: 64,
       height: 64,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (active)
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.55),
-                    blurRadius: 14,
-                    spreadRadius: 1,
-                  ),
-                ],
+      child: Opacity(
+        opacity: active ? 1 : 0.4,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (active)
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withOpacity(0.4),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
               ),
+            CustomPaint(
+              size: const Size(60, 60),
+              painter: _ScallopSealPainter(color: color),
             ),
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  color.withOpacity(active ? 1 : 0.55),
-                  Color.lerp(color, Colors.black, 0.25)!,
-                ],
-              ),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.35),
-                width: 2.5,
-              ),
+            Icon(
+              Icons.check_rounded,
+              color: Colors.white,
+              size: 24,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 3,
+                ),
+              ],
             ),
-          ),
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withOpacity(0.25),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.25),
-                width: 1.5,
-              ),
-            ),
-          ),
-          Icon(
-            Icons.check_rounded,
-            color: Colors.white,
-            size: 26,
-            shadows: [
-              Shadow(
-                color: Colors.black.withOpacity(0.35),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -857,23 +837,19 @@ class _MiniSeal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [color, Color.lerp(color, Colors.black, 0.3)!],
-        ),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.4),
-            blurRadius: 8,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: Size(size, size),
+            painter: _ScallopSealPainter(color: color, points: 10),
           ),
+          Icon(icon, color: Colors.white, size: size * 0.42),
         ],
       ),
-      child: Icon(icon, color: Colors.white, size: size * 0.45),
     );
   }
 }
