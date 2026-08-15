@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 /// Niveaux de certification THIX (alignés sur l'image produit)
 enum CertificationTier {
+  free,       // Gris  — compte gratuit (défaut)
   standard,   // Bleu  — utilisateurs individuels
   premium,    // Or    — fonctionnalités avancées
   enterprise, // Noir  — organisations
@@ -10,9 +11,18 @@ enum CertificationTier {
 }
 
 extension CertificationTierX on CertificationTier {
-  String get value => name; // stocké en DB
+  /// Valeur stockée en DB — DOIT correspondre à l'enum Postgres
+  /// certification_tier_enum ('gratuit','standard','premium','entreprise','officiel')
+  String get value => switch (this) {
+        CertificationTier.free => 'gratuit',
+        CertificationTier.standard => 'standard',
+        CertificationTier.premium => 'premium',
+        CertificationTier.enterprise => 'entreprise',
+        CertificationTier.official => 'officiel',
+      };
 
   String get labelFr => switch (this) {
+        CertificationTier.free => 'Compte Gratuit',
         CertificationTier.standard => 'Compte Standard',
         CertificationTier.premium => 'Compte Premium',
         CertificationTier.enterprise => 'Compte Entreprise',
@@ -20,6 +30,7 @@ extension CertificationTierX on CertificationTier {
       };
 
   String get shortLabel => switch (this) {
+        CertificationTier.free => 'Gratuit',
         CertificationTier.standard => 'Standard',
         CertificationTier.premium => 'Premium',
         CertificationTier.enterprise => 'Entreprise',
@@ -27,6 +38,8 @@ extension CertificationTierX on CertificationTier {
       };
 
   String get descriptionFr => switch (this) {
+        CertificationTier.free =>
+          'Accès de base gratuit. Publication limitée, idéal pour découvrir THIX ID.',
         CertificationTier.standard =>
           'Pour les utilisateurs individuels. Accès aux fonctionnalités de base et à la certification d\'identité.',
         CertificationTier.premium =>
@@ -39,6 +52,7 @@ extension CertificationTierX on CertificationTier {
 
   /// Couleur principale du sceau (image)
   Color get badgeColor => switch (this) {
+        CertificationTier.free => const Color(0xFF9CA3AF), // gris
         CertificationTier.standard => const Color(0xFF2563EB), // bleu
         CertificationTier.premium => const Color(0xFFD4A017), // or
         CertificationTier.enterprise => const Color(0xFF111827), // noir
@@ -46,6 +60,7 @@ extension CertificationTierX on CertificationTier {
       };
 
   IconData get icon => switch (this) {
+        CertificationTier.free => Icons.person_outline_rounded,
         CertificationTier.standard => Icons.person_rounded,
         CertificationTier.premium => Icons.workspace_premium_rounded,
         CertificationTier.enterprise => Icons.business_center_rounded,
@@ -53,6 +68,7 @@ extension CertificationTierX on CertificationTier {
       };
 
   int get rank => switch (this) {
+        CertificationTier.free => 0,
         CertificationTier.standard => 1,
         CertificationTier.premium => 2,
         CertificationTier.enterprise => 3,
@@ -66,15 +82,17 @@ extension CertificationTierX on CertificationTier {
   static CertificationTier parse(Object? raw) {
     final v = (raw ?? '').toString().trim().toLowerCase();
     return switch (v) {
+      'standard' => CertificationTier.standard,
       'premium' => CertificationTier.premium,
       'enterprise' || 'entreprise' => CertificationTier.enterprise,
       'official' || 'officiel' || 'institution' => CertificationTier.official,
-      _ => CertificationTier.standard,
+      _ => CertificationTier.free, // 'gratuit', 'free', 'none', '', valeur inconnue
     };
   }
 
-  /// Prix en USD (null = sur invitation)
+  /// Prix en USD (0 = gratuit, null = sur invitation)
   double? get priceUsd => switch (this) {
+        CertificationTier.free => 0.0,
         CertificationTier.standard => 3.0,
         CertificationTier.premium => 7.0,
         CertificationTier.enterprise => 30.0,
@@ -82,7 +100,7 @@ extension CertificationTierX on CertificationTier {
       };
 
   bool get isInviteOnly => this == CertificationTier.official;
-  bool get isPaid => priceUsd != null;
+  bool get isPaid => priceUsd != null && priceUsd! > 0;
 }
 
 /// Statut de la demande / génération de certification
