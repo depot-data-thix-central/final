@@ -413,6 +413,7 @@ class _TierRow extends StatelessWidget {
   }
 
   String get _title => switch (tier) {
+        CertificationTier.free => 'COMPTE GRATUIT',
         CertificationTier.standard => 'COMPTE STANDARD',
         CertificationTier.premium => 'COMPTE PREMIUM',
         CertificationTier.enterprise => 'COMPTE ENTREPRISE',
@@ -421,6 +422,8 @@ class _TierRow extends StatelessWidget {
       };
 
   String get _body => switch (tier) {
+        CertificationTier.free =>
+          'Accès de base gratuit. Publication limitée, idéal pour découvrir THIX ID.',
         CertificationTier.standard =>
           'Pour les utilisateurs individuels. Accès aux fonctionnalités de base et à la certification d\'identité.',
         CertificationTier.premium =>
@@ -432,6 +435,7 @@ class _TierRow extends StatelessWidget {
       };
 
   IconData get _titleIcon => switch (tier) {
+        CertificationTier.free => Icons.person_outline_rounded,
         CertificationTier.standard => Icons.person_rounded,
         CertificationTier.premium => Icons.star_rounded,
         CertificationTier.enterprise => Icons.business_center_rounded,
