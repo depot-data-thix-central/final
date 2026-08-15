@@ -97,6 +97,11 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
+    
+    // ✅ CORRECTION DE LA LOGIQUE : Si l'utilisateur n'a pas de certification active, on force "Compte Gratuit"
+    final isFreeAccount = info.status == CertificationStatus.none;
+    final displayTierName = isFreeAccount ? 'Compte Gratuit' : info.tier.labelFr;
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(8, top + 4, 16, 18),
@@ -187,8 +192,8 @@ class _Header extends StatelessWidget {
               child: Row(
                 children: [
                   _MiniSeal(
-                    color: info.tier.badgeColor,
-                    icon: info.tier.icon,
+                    color: isFreeAccount ? Colors.blueGrey : info.tier.badgeColor,
+                    icon: isFreeAccount ? Icons.person_outline : info.tier.icon,
                     size: 40,
                   ),
                   const SizedBox(width: 12),
@@ -206,7 +211,7 @@ class _Header extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          info.tier.labelFr,
+                          displayTierName,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 15,
@@ -362,6 +367,7 @@ class _CertificationBoard extends StatelessWidget {
             onRequest: onRequest,
           ),
           const _DividerLine(),
+          
           _TierRow(
             tier: CertificationTier.premium,
             current: current,
@@ -374,14 +380,20 @@ class _CertificationBoard extends StatelessWidget {
               'Accès à la monétisation des contenus et services.',
             ],
           ),
-          const _DividerLine(),
+          
+          // ✅ Suppression de la Divider ici pour mettre en valeur la carte Entreprise
+          const SizedBox(height: 6),
+          
           _TierRow(
             tier: CertificationTier.enterprise,
             current: current,
             rate: rate,
             onRequest: onRequest,
           ),
-          const _DividerLine(),
+          
+          const SizedBox(height: 6),
+          // ✅ Suppression de la Divider ici également
+          
           _TierRow(
             tier: CertificationTier.official,
             current: current,
@@ -475,113 +487,140 @@ class _TierRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = tier.badgeColor;
     final active = _isCurrent || current.tier.rank >= tier.rank;
+    
+    // ✅ DÉTECTION DU NIVEAU ENTREPRISE POUR LE DESIGN "CLAIRE PROPRE"
+    final isEnterprise = tier == CertificationTier.enterprise;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _canRequest ? () => onRequest(tier) : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SealBadge(color: color, active: active),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(_titleIcon, color: color, size: 16),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _title,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.4,
-                              height: 1.25,
+    return Container(
+      // Marge uniquement pour l'entreprise afin de la détacher des autres
+      margin: isEnterprise ? const EdgeInsets.symmetric(vertical: 6) : EdgeInsets.zero,
+      
+      // ✅ NOUVEAU DESIGN CLAIR ET PROPRE POUR L'ENTREPRISE
+      decoration: isEnterprise 
+          ? BoxDecoration(
+              color: const Color(0xFF1E334D), // Un fond bleu nuit uni et propre
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF4A90E2).withOpacity(0.35), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ) 
+          : null,
+          
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _canRequest ? () => onRequest(tier) : null,
+          borderRadius: BorderRadius.circular(isEnterprise ? 16 : 14),
+          child: Padding(
+            // Plus d'espace (padding) pour la carte Entreprise
+            padding: isEnterprise 
+                ? const EdgeInsets.all(16) 
+                : const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SealBadge(color: color, active: active),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(_titleIcon, color: color, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _title,
+                              style: TextStyle(
+                                color: color,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.4,
+                                height: 1.25,
+                              ),
                             ),
                           ),
+                        ],
+                      ),
+                      if (showGeneratedBadge || _isCurrent) ...[
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (showGeneratedBadge)
+                              const _Chip(
+                                  label: 'GÉNÉRÉ', color: Color(0xFFD4A017)),
+                            if (_isCurrent) _Chip(label: 'ACTUEL', color: color),
+                          ],
                         ),
                       ],
-                    ),
-                    if (showGeneratedBadge || _isCurrent) ...[
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
+                      const SizedBox(height: 6),
+                      Text(
+                        _body,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(isEnterprise ? 0.85 : 0.78),
+                          fontSize: 12.2,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      ...extraLines.map(
+                        (l) => Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.monetization_on_rounded,
+                                  size: 14, color: color.withOpacity(0.9)),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  l,
+                                  style: TextStyle(
+                                    color: color.withOpacity(0.95),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
                         children: [
-                          if (showGeneratedBadge)
-                            const _Chip(
-                                label: 'GÉNÉRÉ', color: Color(0xFFD4A017)),
-                          if (_isCurrent) _Chip(label: 'ACTUEL', color: color),
+                          Expanded(
+                            child:
+                                _PriceLine(tier: tier, rate: rate, color: color),
+                          ),
+                          const SizedBox(width: 8),
+                          _ActionBtn(
+                            tier: tier,
+                            canRequest: _canRequest,
+                            isCurrent: _isCurrent,
+                            isCertified: current.isCertified && _isCurrent,
+                            isPending: current.status ==
+                                    CertificationStatus.pending &&
+                                !_isLockedBelow,
+                            color: color,
+                          ),
                         ],
                       ),
                     ],
-                    const SizedBox(height: 6),
-                    Text(
-                      _body,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.78),
-                        fontSize: 12.2,
-                        height: 1.35,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    ...extraLines.map(
-                      (l) => Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.monetization_on_rounded,
-                                size: 14, color: color.withOpacity(0.9)),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                l,
-                                style: TextStyle(
-                                  color: color.withOpacity(0.95),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.3,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child:
-                              _PriceLine(tier: tier, rate: rate, color: color),
-                        ),
-                        const SizedBox(width: 8),
-                        _ActionBtn(
-                          tier: tier,
-                          canRequest: _canRequest,
-                          isCurrent: _isCurrent,
-                          isCertified: current.isCertified && _isCurrent,
-                          isPending: current.status ==
-                                  CertificationStatus.pending &&
-                              !_isLockedBelow,
-                          color: color,
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
