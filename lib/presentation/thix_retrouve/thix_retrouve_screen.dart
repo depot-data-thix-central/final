@@ -1,58 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'models/objet_model.dart';
 import 'pages/declarer_objet_page.dart';
 import 'pages/carte_signalements_page.dart';
 import 'pages/object_detail_page.dart';
 import 'pages/mes_recherches_page.dart';
-import 'pages/ai_match_page.dart';
+import 'providers/objet_providers.dart';
 
-class ThixRetrouveScreen extends StatefulWidget {
+class ThixRetrouveScreen extends ConsumerStatefulWidget {
   const ThixRetrouveScreen({super.key});
 
   @override
-  State<ThixRetrouveScreen> createState() => _ThixRetrouveScreenState();
+  ConsumerState<ThixRetrouveScreen> createState() => _ThixRetrouveScreenState();
 }
 
-class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
+class _ThixRetrouveScreenState extends ConsumerState<ThixRetrouveScreen> {
   int _currentIndex = 0;
-
-  final List<Map<String, dynamic>> _recentObjects = [
-    {
-      'title': 'Téléphone Samsung',
-      'status': 'PERDU',
-      'location': 'THIX Center, Kiswahili',
-      'time': 'Aujourd\'hui, 15h',
-      'image': Icons.phone_android,
-      'reward': true,
-    },
-    {
-      'title': 'Portefeuille noir',
-      'status': 'PERDU',
-      'location': 'Zone Industrielle',
-      'time': 'Hier, 18h',
-      'image': Icons.account_balance_wallet,
-      'reward': true,
-    },
-    {
-      'title': 'Clés avec porte-clés',
-      'status': 'TROUVÉ',
-      'location': 'Parking visiteurs',
-      'time': 'Aujourd\'hui, 10h',
-      'image': Icons.vpn_key,
-      'reward': false,
-    },
-  ];
 
   @override
   Widget build(BuildContext context) {
+    final objetsAsync = ref.watch(objetsRecentsProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FC),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            // ── Header ──────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
@@ -81,196 +56,275 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
             ),
 
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Logo section
-                    Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(objetsRecentsProvider);
+                },
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Logo ──────────────────────────────────────
+                      Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E3A8A),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.search, color: Color(0xFFFBBF24), size: 28),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              RichText(
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: 'THIX ',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF1E3A8A),
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'RETROUVE',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFFF59E0B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                'Perdu ? Trouvé ? On vous aide !',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ── Boutons Perdu / Trouvé ────────────────────
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildActionCard(
+                              color: const Color(0xFFF59E0B),
+                              icon: Icons.search,
+                              title: "J'ai perdu\nun objet",
+                              subtitle: 'Déclarez un objet\nque vous avez perdu',
+                              onTap: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const DeclarerObjetPage(type: StatutObjet.perdu),
+                                  ),
+                                );
+                                if (result == true) {
+                                  ref.invalidate(objetsRecentsProvider);
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildActionCard(
+                              color: const Color(0xFF2563EB),
+                              icon: Icons.inventory_2_outlined,
+                              title: "J'ai trouvé\nun objet",
+                              subtitle: 'Déclarez un objet\nque vous avez trouvé',
+                              onTap: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const DeclarerObjetPage(type: StatutObjet.trouve),
+                                  ),
+                                );
+                                if (result == true) {
+                                  ref.invalidate(objetsRecentsProvider);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Voir les objets autour de moi ─────────────
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const CarteSignalementsPage()),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E3A8A),
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade200),
                           ),
-                          child: const Icon(Icons.search, color: Color(0xFFFBBF24), size: 28),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            RichText(
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: 'THIX ',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF1E3A8A),
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: 'RETROUVE',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFFF59E0B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              'Perdu ? Trouvé ? On vous aide !',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Two main action buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildActionCard(
-                            color: const Color(0xFFF59E0B),
-                            icon: Icons.search,
-                            title: "J'ai perdu\nun objet",
-                            subtitle: 'Déclarez un objet\nque vous avez perdu',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const DeclarerObjetPage(type: StatutObjet.perdu),
+                          child: Row(
+                            children: [
+                              Text(
+                                'Voir les objets autour de moi',
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildActionCard(
-                            color: const Color(0xFF2563EB),
-                            icon: Icons.inventory_2_outlined,
-                            title: "J'ai trouvé\nun objet",
-                            subtitle: 'Déclarez un objet\nque vous avez trouvé',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const DeclarerObjetPage(type: StatutObjet.trouve),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'Explorer la carte',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
                                 ),
-                              );
-                            },
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.location_on, color: Color(0xFF2563EB), size: 20),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Voir les objets autour de moi
-                    InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const CarteSignalementsPage()),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(
-                              'Voir les objets autour de moi',
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              'Explorer la carte',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.location_on, color: Color(0xFF2563EB), size: 20),
-                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                    // Objets récents header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Objets récents',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const MesRecherchesPage()),
-                            );
-                          },
-                          child: Text(
-                            'Voir tout',
+                      // ── Objets récents ────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Objets récents',
                             style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: const Color(0xFF2563EB),
-                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black87,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const MesRecherchesPage()),
+                              );
+                            },
+                            child: Text(
+                              'Voir tout',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: const Color(0xFF2563EB),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
 
-                    // Recent objects list
-                    ..._recentObjects.map((obj) => GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ObjectDetailPage(
-                                  title: obj['title'] as String,
-                                  status: obj['status'] as String,
-                                  location: obj['location'] as String,
-                                  time: obj['time'] as String,
+                      // ── Liste dynamique (Riverpod) ────────────────
+                      objetsAsync.when(
+                        data: (objets) {
+                          if (objets.isEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 40),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey[300]),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Aucun objet pour le moment',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        color: Colors.grey[500],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Soyez le premier à déclarer !',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );
-                          },
-                          child: _buildObjectCard(obj),
-                        )),
-                    const SizedBox(height: 80),
-                  ],
+                          }
+
+                          return Column(
+                            children: objets.take(8).map((obj) {
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ObjectDetailPage(
+                                        title: obj.titre,
+                                        status: obj.statutLabel,
+                                        location: obj.lieu,
+                                        time: _formatDate(obj.date),
+                                        description: obj.description,
+                                        reward: obj.recompense ?? '',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: _buildObjectCard(obj),
+                              );
+                            }).toList(),
+                          );
+                        },
+                        loading: () => const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                        ),
+                        error: (err, stack) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.red, size: 36),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Impossible de charger les objets',
+                                  style: GoogleFonts.inter(color: Colors.red[700]),
+                                ),
+                                TextButton(
+                                  onPressed: () => ref.invalidate(objetsRecentsProvider),
+                                  child: const Text('Réessayer'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 80),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -279,6 +333,45 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
       ),
       bottomNavigationBar: _buildBottomNav(),
     );
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    final timeStr = '\( {date.hour}h \){date.minute.toString().padLeft(2, '0')}';
+
+    if (dateOnly == today) {
+      return "Aujourd'hui, $timeStr";
+    }
+    if (dateOnly == today.subtract(const Duration(days: 1))) {
+      return 'Hier, $timeStr';
+    }
+    return '\( {date.day}/ \){date.month}/${date.year}';
+  }
+
+  IconData _iconForCategorie(String? cat) {
+    switch (cat?.toLowerCase()) {
+      case 'téléphone':
+        return Icons.phone_android;
+      case 'portefeuille / sac':
+        return Icons.account_balance_wallet;
+      case 'clés':
+        return Icons.vpn_key;
+      case 'sac à dos':
+        return Icons.backpack;
+      case 'bijoux / montre':
+        return Icons.watch;
+      case 'documents':
+        return Icons.description_outlined;
+      case 'écouteurs / accessoires':
+        return Icons.headphones;
+      default:
+        return Icons.inventory_2_outlined;
+    }
   }
 
   Widget _buildActionCard({
@@ -340,8 +433,9 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
     );
   }
 
-  Widget _buildObjectCard(Map<String, dynamic> obj) {
-    final isLost = obj['status'] == 'PERDU';
+  Widget _buildObjectCard(ObjetModel obj) {
+    final isLost = obj.statut == StatutObjet.perdu;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -365,7 +459,11 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(obj['image'] as IconData, size: 28, color: Colors.grey[700]),
+            child: Icon(
+              _iconForCategorie(obj.categorie),
+              size: 28,
+              color: Colors.grey[700],
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -373,16 +471,18 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  obj['title'] as String,
+                  obj.titre,
                   style: GoogleFonts.inter(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: Colors.black87,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${obj['status']} • ${obj['time']}',
+                  '${obj.statutLabel} • ${_formatDate(obj.date)}',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: isLost ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
@@ -390,16 +490,18 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
                   ),
                 ),
                 Text(
-                  obj['location'] as String,
+                  obj.lieu,
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: Colors.grey[500],
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          if (obj['reward'] == true)
+          if (obj.hasRecompense)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -415,7 +517,7 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
                 ),
               ),
             )
-          else
+          else if (obj.statut == StatutObjet.trouve)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -452,7 +554,9 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
         currentIndex: _currentIndex,
         onTap: (i) {
           setState(() => _currentIndex = i);
+
           if (i == 2) {
+            // Bouton +
             showModalBottomSheet(
               context: context,
               shape: const RoundedRectangleBorder(
@@ -466,7 +570,10 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
                     children: [
                       Text(
                         'Que souhaitez-vous faire ?',
-                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       ListTile(
@@ -475,14 +582,17 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
                           child: Icon(Icons.search, color: Colors.white),
                         ),
                         title: const Text("J'ai perdu un objet"),
-                        onTap: () {
+                        onTap: () async {
                           Navigator.pop(context);
-                          Navigator.push(
+                          final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => const DeclarerObjetPage(type: StatutObjet.perdu),
                             ),
                           );
+                          if (result == true) {
+                            ref.invalidate(objetsRecentsProvider);
+                          }
                         },
                       ),
                       ListTile(
@@ -491,20 +601,29 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
                           child: Icon(Icons.inventory_2_outlined, color: Colors.white),
                         ),
                         title: const Text("J'ai trouvé un objet"),
-                        onTap: () {
+                        onTap: () async {
                           Navigator.pop(context);
-                          Navigator.push(
+                          final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => const DeclarerObjetPage(type: StatutObjet.trouve),
                             ),
                           );
+                          if (result == true) {
+                            ref.invalidate(objetsRecentsProvider);
+                          }
                         },
                       ),
                     ],
                   ),
                 ),
               ),
+            );
+          } else if (i == 1) {
+            // Services → Mes recherches
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MesRecherchesPage()),
             );
           }
         },
@@ -515,14 +634,30 @@ class _ThixRetrouveScreenState extends State<ThixRetrouveScreen> {
         selectedLabelStyle: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
         unselectedLabelStyle: GoogleFonts.inter(fontSize: 11),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Accueil'),
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view_outlined), activeIcon: Icon(Icons.grid_view), label: 'Services'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Accueil',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.grid_view_outlined),
+            activeIcon: Icon(Icons.grid_view),
+            label: 'Services',
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.add_circle, size: 36, color: Color(0xFFF59E0B)),
             label: '',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), activeIcon: Icon(Icons.chat_bubble), label: 'Messages'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profil'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: 'Messages',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profil',
+          ),
         ],
       ),
     );
