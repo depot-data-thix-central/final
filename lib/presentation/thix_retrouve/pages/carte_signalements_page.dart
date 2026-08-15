@@ -296,7 +296,8 @@ class _CarteSignalementsPageState extends ConsumerState<CarteSignalementsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
             child: Text(
-              '\( {objets.length} objet \){objets.length > 1 ? 's' : ''} autour de vous',
+              // CORRECTION 1 ICI : Utilisation des double-guillemets (" ") et des symboles $ corrects
+              "${objets.length} objet${objets.length > 1 ? 's' : ''} autour de vous",
               style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
             ),
           ),
@@ -430,10 +431,12 @@ class _CarteSignalementsPageState extends ConsumerState<CarteSignalementsPage> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final dateOnly = DateTime(date.year, date.month, date.day);
-    final timeStr = '\( {date.hour}h \){date.minute.toString().padLeft(2, '0')}';
+    // CORRECTION 2 ICI : Remplacement des \( \) par des $
+    final timeStr = '${date.hour}h${date.minute.toString().padLeft(2, '0')}';
 
     if (dateOnly == today) return 'Aujourd\'hui, $timeStr';
     if (dateOnly == today.subtract(const Duration(days: 1))) return 'Hier, $timeStr';
-    return '\( {date.day}/ \){date.month}/${date.year}';
+    // CORRECTION 3 ICI AUSSI
+    return '${date.day}/${date.month}/${date.year}';
   }
 }
