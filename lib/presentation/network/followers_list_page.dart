@@ -1,6 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'; // ✅ i minuscule !
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+// ✅ Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
 
 class FollowersListPage extends StatefulWidget {
   final String userId;
@@ -40,10 +44,10 @@ class _FollowersListPageState extends State<FollowersListPage> {
       // On extrait la liste des IDs
       final List<String> followerIds = followsList.map((e) => e['follower_id'].toString()).toList();
 
-      // ÉTAPE 2 : On récupère les profils correspondants (inFilter est parfait pour ça)
+      // ÉTAPE 2 : On récupère les profils correspondants (avec les colonnes de certification ✅)
       final profilesRes = await Supabase.instance.client
           .from('profiles')
-          .select('id, display_name, photo_url, avatar_url')
+          .select('id, display_name, photo_url, avatar_url, certification_tier, certification_status, is_verified')
           .inFilter('id', followerIds);
 
       // On reformate pour l'interface
@@ -130,6 +134,19 @@ class _FollowersListPageState extends State<FollowersListPage> {
                               final name = profile != null ? (profile['display_name'] ?? 'User') as String : 'User';
                               final photo = profile != null ? (profile['photo_url'] ?? profile['avatar_url']) as String? : null;
 
+                              // Extraction de la certification
+                              CertificationTier? tier;
+                              CertificationStatus? status;
+                              bool isCertified = false;
+                              bool isLegacyVerified = false;
+
+                              if (profile != null) {
+                                tier = CertificationTierX.parse(profile['certification_tier']);
+                                status = CertificationStatusX.parse(profile['certification_status']);
+                                isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+                                isLegacyVerified = profile['is_verified'] == true;
+                              }
+
                               Widget avatarWidget;
                               if (photo != null && photo.isNotEmpty) {
                                 avatarWidget = CircleAvatar(backgroundImage: NetworkImage(photo));
@@ -143,9 +160,30 @@ class _FollowersListPageState extends State<FollowersListPage> {
                               return ListTile(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 leading: avatarWidget,
-                                title: Text(
-                                  name, 
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))
+                                title: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        name, 
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (isCertified)
+                                      CertificationNameBadge(
+                                        tier: tier,
+                                        status: status,
+                                        showLabel: false,
+                                        iconSize: 15,
+                                        padding: const EdgeInsets.only(left: 4),
+                                      )
+                                    else if (isLegacyVerified)
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+                                      ),
+                                  ],
                                 ),
                                 onTap: () => context.push('/network/profile/$fid'),
                               );
