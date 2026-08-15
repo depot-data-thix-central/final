@@ -452,6 +452,7 @@ class _ThixRetrouveScreenState extends ConsumerState<ThixRetrouveScreen> {
       ),
       child: Row(
         children: [
+          // ── Photo ou icône ────────────────────────────────────
           Container(
             width: 56,
             height: 56,
@@ -459,10 +460,38 @@ class _ThixRetrouveScreenState extends ConsumerState<ThixRetrouveScreen> {
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              _iconForCategorie(obj.categorie),
-              size: 28,
-              color: Colors.grey[700],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: obj.imageUrl != null && obj.imageUrl!.isNotEmpty
+                  ? Image.network(
+                      obj.imageUrl!,
+                      fit: BoxFit.cover,
+                      width: 56,
+                      height: 56,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => Icon(
+                        _iconForCategorie(obj.categorie),
+                        size: 28,
+                        color: Colors.grey[700],
+                      ),
+                    )
+                  : Icon(
+                      _iconForCategorie(obj.categorie),
+                      size: 28,
+                      color: Colors.grey[700],
+                    ),
             ),
           ),
           const SizedBox(width: 12),
