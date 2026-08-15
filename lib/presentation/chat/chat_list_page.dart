@@ -23,6 +23,11 @@ import 'package:thix_id/presentation/chat/call/call_history_page.dart';
 import 'package:thix_id/presentation/chat/widgets/status_story_row.dart';
 import 'package:thix_id/presentation/chat/providers/status_provider.dart';
 
+// ✅ Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
+
 class ChatListPage extends ConsumerStatefulWidget {
   const ChatListPage({super.key});
 
@@ -705,55 +710,90 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
                         children: [
                           Row(
                             children: [
+                              // ✅ DÉBUT DU BLOC MODIFIÉ POUR LA CERTIFICATION
                               Expanded(
-                                child: Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        chatName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
-                                          color: ThixPolicy.textMain,
-                                        ),
-                                      ),
-                                    ),
-                                    if (conv.isEscalation) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: ThixPolicy.danger.withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(
-                                            color: ThixPolicy.danger.withValues(alpha: 0.4),
+                                child: Consumer(
+                                  builder: (context, ref, _) {
+                                    CertificationTier? tier;
+                                    CertificationStatus? status;
+                                    bool isCertified = false;
+                                    bool isLegacyVerified = false;
+
+                                    if (!conv.isGroup && !conv.isEscalation && otherUserId.isNotEmpty) {
+                                      final profileData = ref.watch(userProfileProvider(otherUserId)).valueOrNull;
+                                      if (profileData != null) {
+                                        tier = CertificationTierX.parse(profileData['certification_tier']);
+                                        status = CertificationStatusX.parse(profileData['certification_status']);
+                                        isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+                                        isLegacyVerified = profileData['is_verified'] == true;
+                                      }
+                                    }
+
+                                    return Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            chatName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                                              color: ThixPolicy.textMain,
+                                            ),
                                           ),
                                         ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.swap_vert_rounded, size: 11, color: ThixPolicy.danger),
-                                            SizedBox(width: 3),
-                                            Text(
-                                              'Escaladé',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w800,
-                                                color: ThixPolicy.danger,
+                                        if (isCertified)
+                                          CertificationNameBadge(
+                                            tier: tier,
+                                            status: status,
+                                            showLabel: false,
+                                            iconSize: 15,
+                                            padding: const EdgeInsets.only(left: 4),
+                                          )
+                                        else if (isLegacyVerified)
+                                          const Padding(
+                                            padding: EdgeInsets.only(left: 4),
+                                            child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+                                          ),
+                                        if (conv.isEscalation) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: ThixPolicy.danger.withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: ThixPolicy.danger.withValues(alpha: 0.4),
                                               ),
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                    ] else if (conv.isGroup) ...[
-                                      const SizedBox(width: 4),
-                                      const Icon(Icons.groups_rounded, size: 14, color: ThixPolicy.textSecondary),
-                                    ],
-                                  ],
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.swap_vert_rounded, size: 11, color: ThixPolicy.danger),
+                                                SizedBox(width: 3),
+                                                Text(
+                                                  'Escaladé',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: ThixPolicy.danger,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ] else if (conv.isGroup) ...[
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.groups_rounded, size: 14, color: ThixPolicy.textSecondary),
+                                        ],
+                                      ],
+                                    );
+                                  }
                                 ),
                               ),
+                              // ✅ FIN DU BLOC MODIFIÉ POUR LA CERTIFICATION
+                              
                               const SizedBox(width: 8),
                               Text(
                                 _fmt(t),
