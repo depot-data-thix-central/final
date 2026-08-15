@@ -10,29 +10,33 @@ class ObjetService {
       : _client = client ?? SupabaseConfig.client;
 
   static const String _table = 'thix_objets';
-  static const String _bucket = 'objets'; // crée ce bucket dans Supabase Storage
+  static const String _bucket = 'objets'; 
 
   // ── Upload photo ──────────────────────────────────────────────
   Future<String?> uploadPhoto(File file) async {
-    try {
-      final userId = SupabaseConfig.currentUser?.id ?? 'anonymous';
-      final ext = file.path.split('.').last.toLowerCase();
-      final fileName = '\( {userId}_ \){DateTime.now().millisecondsSinceEpoch}.$ext';
-      final path = 'photos/$fileName';
+  try {
+    final userId = SupabaseConfig.currentUser?.id ?? 'anonymous';
+    final ext = file.path.split('.').last.toLowerCase();
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final path = '$userId/$fileName';   // dossier = userId
 
-      await _client.storage.from(_bucket).upload(
-            path,
-            file,
-            fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
-          );
+    await _client.storage.from(_bucket).upload(
+      path,
+      file,
+      fileOptions: const FileOptions(
+        cacheControl: '3600',
+        upsert: false,
+      ),
+    );
 
-      final publicUrl = _client.storage.from(_bucket).getPublicUrl(path);
-      return publicUrl;
-    } catch (e) {
-      print('Erreur uploadPhoto: $e');
-      rethrow;
-    }
+    // URL publique
+    final publicUrl = _client.storage.from(_bucket).getPublicUrl(path);
+    return publicUrl;
+  } catch (e) {
+    print('Erreur uploadPhoto: $e');
+    rethrow;
   }
+}
 
   // ── Déclarer un objet ─────────────────────────────────────────
   Future<ObjetModel?> declarerObjet({
