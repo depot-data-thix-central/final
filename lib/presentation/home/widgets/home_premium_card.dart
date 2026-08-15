@@ -20,6 +20,8 @@ class HomePremiumCard extends ConsumerWidget {
     // context.pushNamed('certification');
   }
 
+  static const String _tierLadder = 'Gratuit · Standard · Premium · Entreprise · Officiel';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final certAsync = ref.watch(myCertificationProvider);
@@ -50,7 +52,7 @@ class HomePremiumCard extends ConsumerWidget {
         onTap: () => _openCertification(context),
         child: _Content(
           title: 'Certification THIX',
-          subtitle: 'Standard · Premium · Entreprise · Officiel',
+          subtitle: _tierLadder,
           color: ThixPolicy.primaryDeep,
           icon: Icons.verified_user_rounded,
         ),
@@ -64,9 +66,7 @@ class HomePremiumCard extends ConsumerWidget {
               : info.status == CertificationStatus.pending
                   ? 'Certification en cours'
                   : 'Certification THIX',
-          subtitle: info.isCertified
-              ? _statusLine(info)
-              : 'Standard · Premium · Entreprise · Officiel',
+          subtitle: info.isCertified ? _statusLine(info) : _tierLadder,
           color: info.tier.badgeColor,
           icon: info.isCertified ? info.tier.icon : Icons.verified_user_rounded,
         ),
@@ -76,16 +76,13 @@ class HomePremiumCard extends ConsumerWidget {
 
   String _statusLine(CertificationInfo info) {
     final s = info.status.labelFr;
-    if (info.tier == CertificationTier.official) {
-      return 'Niveau institutions · $s';
-    }
-    if (info.tier == CertificationTier.enterprise) {
-      return 'Compte organisation · $s';
-    }
-    if (info.tier == CertificationTier.premium) {
-      return 'Fonctionnalités avancées · $s';
-    }
-    return 'Identité & accès de base · $s';
+    return switch (info.tier) {
+      CertificationTier.official => 'Niveau institutions · $s',
+      CertificationTier.enterprise => 'Compte organisation · $s',
+      CertificationTier.premium => 'Fonctionnalités avancées · $s',
+      CertificationTier.standard => 'Identité & accès de base · $s',
+      CertificationTier.free => 'Compte gratuit · $s',
+    };
   }
 }
 
