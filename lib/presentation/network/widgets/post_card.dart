@@ -663,7 +663,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
           final likesCount = ref.watch(postItemProvider.select((p) => p.likesCount));
           final isOwner = widget.currentProfileId == post.userId;
 
-          // 1. Récupération des données du profil de l'auteur pour la certification
+          // 1. Récupération des données du profil de l'auteur
           final authorProfile = ref.watch(userProfileProvider(post.userId)).valueOrNull;
           
           CertificationTier? tier;
@@ -678,7 +678,16 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
             isLegacyVerified = authorProfile['is_verified'] == true;
           }
 
-          // Détermination du statut de Follow (Priorité DB > Optimiste)
+          // 2. Récupération des données du profil de l'utilisateur COURANT (pour bloquer "Modifier")
+          final currentUserProfile = ref.watch(userProfileProvider(widget.currentProfileId)).valueOrNull;
+          bool isCurrentUserFree = true; // Gratuit par défaut
+          
+          if (currentUserProfile != null) {
+            final currentTierStr = (currentUserProfile['certification_tier']?.toString().toLowerCase()) ?? 'gratuit';
+            isCurrentUserFree = currentTierStr == 'gratuit' || currentTierStr == 'none';
+          }
+
+          // Détermination du statut de Follow
           final isFollowingDB = ref.watch(followStatusProvider(post.userId)).valueOrNull;
           final isFollowing = isFollowingDB ?? _isFollowingLocal;
 
@@ -721,7 +730,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                                         : null,
                                   ),
                                 ),
-                                // Bouton "+" : Synchro parfaite avec Supabase
+                                // Bouton "+" : Synchro parfaite
                                 if (!isOwner && !isFollowing)
                                   Positioned(
                                     bottom: -2, right: -2,
@@ -730,7 +739,6 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                                         if (_followBusy) return;
                                         setState(() => _followBusy = true);
                                         HapticFeedback.selectionClick();
-                                        // UI Optimiste : Le plus disparaît immédiatement
                                         setState(() => _isFollowingLocal = true);
                                         
                                         try {
@@ -761,7 +769,6 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // ✅ LA CORRECTION : ROW COMPLET AVEC LE BADGE
                                   Row(
                                     children: [
                                       Flexible(
@@ -780,7 +787,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                                         CertificationNameBadge(
                                           tier: tier,
                                           status: status,
-                                          showLabel: false, // sceau seul
+                                          showLabel: false,
                                           iconSize: 16,
                                           padding: const EdgeInsets.only(left: 5),
                                         )
@@ -878,7 +885,10 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                               }
                             },
                             itemBuilder: (_) => [
-                              if (isOwner) const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Modifier')])),
+                              // ✅ MASQUER L'OPTION 'MODIFIER' POUR LES COMPTES GRATUITS
+                              if (isOwner && !isCurrentUserFree) 
+                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Modifier')])),
+                              
                               if (isOwner) const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline_rounded, size: 18, color: ThixPolicy.danger), SizedBox(width: 10), Text('Supprimer', style: TextStyle(color: ThixPolicy.danger))])),
                               const PopupMenuItem(value: 'save', child: Row(children: [Icon(Icons.bookmark_border_rounded, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Sauvegarder')])),
                               const PopupMenuItem(value: 'repost', child: Row(children: [Icon(Icons.repeat_rounded, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Reposter')])),
@@ -1036,7 +1046,6 @@ class _OriginalPostEmbed extends ConsumerWidget {
           );
         }
 
-        // Récupération dynamique de la certification pour le post originel
         final originalAuthorProfile = ref.watch(userProfileProvider(original.userId)).valueOrNull;
         
         CertificationTier? originalTier;
@@ -1074,7 +1083,6 @@ class _OriginalPostEmbed extends ConsumerWidget {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          // ✅ LA CORRECTION: ROW COMPLET DANS L'EMBED REPOST
                           child: Row(
                             children: [
                               Flexible(
@@ -1089,7 +1097,7 @@ class _OriginalPostEmbed extends ConsumerWidget {
                                 CertificationNameBadge(
                                   tier: originalTier, 
                                   status: originalStatus, 
-                                  showLabel: false, // ✅ AJOUTÉ COMME DEMANDÉ
+                                  showLabel: false,
                                   iconSize: 14, 
                                   padding: const EdgeInsets.only(left: 4)
                                 )
@@ -1401,7 +1409,7 @@ class _ThixWaveformAudioPlayerState extends State<_ThixWaveformAudioPlayer> {
             onTap: () { if (_isPlaying) _audioPlayer.pause(); else _audioPlayer.play(UrlSource(widget.audioUrl)); },
             child: Container(
               width: 52, height: 52,
-              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
               child: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: ThixPolicy.inkDeep, size: 28),
             ),
           ),
