@@ -247,12 +247,14 @@ import 'package:thix_id/presentation/mon_pays/admin/admin_achievement_form_page.
 import 'package:thix_id/presentation/mon_pays/admin/admin_media_form_page.dart';
 import 'package:thix_id/presentation/mon_pays/models/province.dart';
 
-// === THIX URGENT & IA ===
-import 'package:thix_id/presentation/thix_urgent/thix_urgent_screen.dart';
-import 'package:thix_id/presentation/thix_urgent/chambre_de_crise/chambre_de_crise_screen.dart';
-import 'package:thix_id/presentation/thix_urgent/providers/thix_urgent_providers.dart';
-import 'package:thix_id/presentation/thix_urgent/controllers/urgent_controller.dart';
-import 'package:thix_id/presentation/thix_urgent/pages/gardiens_config_page.dart';
+// === THIX RETROUVE & IA ===
+import 'package:thix_id/presentation/thix_retrouve/thix_retrouve_screen.dart';
+import 'package:thix_id/presentation/thix_retrouve/pages/object_detail_page.dart';
+import 'package:thix_id/presentation/thix_retrouve/pages/ai_match_page.dart';
+import 'package:thix_id/presentation/thix_retrouve/pages/mes_recherches_page.dart';
+import 'package:thix_id/presentation/thix_retrouve/pages/declarer_objet_page.dart';
+import 'package:thix_id/presentation/thix_retrouve/pages/carte_signalements_page.dart';
+import 'package:thix_id/presentation/thix_retrouve/models/objet_model.dart';
 import 'package:thix_id/presentation/thix_ia/thix_ia_screen.dart';
 
 // === ADMIN SYSTEM GLOBAL ===
@@ -307,7 +309,7 @@ class AppRouter {
           final loc = state.matchedLocation;
           final isLoginPage = loc == AppRoutes.login;
           final isRegPage = loc == AppRoutes.personalReg || loc == AppRoutes.enterpriseReg;
-          final isPublic = loc == AppRoutes.start || isLoginPage || isRegPage || loc == AppRoutes.publicProfile || loc == AppRoutes.jobs || loc == AppRoutes.opportunities || loc == AppRoutes.education || loc == AppRoutes.trainingHome || loc.startsWith('${AppRoutes.trainingDetailsBasePath}/') || loc == AppRoutes.monPays || loc.startsWith('${AppRoutes.monPays}/') || loc.startsWith('/thix-event') || loc.startsWith('/thix-urgent') || loc.startsWith('/thix-weeding') || loc.startsWith('/thix-reservation/delivery');
+          final isPublic = loc == AppRoutes.start || isLoginPage || isRegPage || loc == AppRoutes.publicProfile || loc == AppRoutes.jobs || loc == AppRoutes.opportunities || loc == AppRoutes.education || loc == AppRoutes.trainingHome || loc.startsWith('${AppRoutes.trainingDetailsBasePath}/') || loc == AppRoutes.monPays || loc.startsWith('${AppRoutes.monPays}/') || loc.startsWith('/thix-event') || loc.startsWith('/thix-retrouve') || loc.startsWith('/thix-weeding') || loc.startsWith('/thix-reservation/delivery');
           final logged = auth.isAuthenticated;
 
           if (!logged) return isPublic ? null : AppRoutes.login;
@@ -428,11 +430,46 @@ class AppRouter {
         GoRoute(path: '/jobs/:jobId', name: 'jobDetails', pageBuilder: (_, state) => NoTransitionPage(child: JobDetailsPage(jobId: state.pathParameters['jobId'] ?? '', applied: (state.uri.queryParameters['applied'] ?? '') == '1'))),
         GoRoute(path: '/jobs/:jobId/apply', name: 'jobApply', pageBuilder: (_, state) => NoTransitionPage(child: JobApplyPage(jobId: state.pathParameters['jobId'] ?? ''))),
 
-        // === THIX URGENT ===
-        GoRoute(path: '/thix-urgent', name: 'thixUrgent', pageBuilder: (_, __) => NoTransitionPage(child: ThixUrgentProviders.wrap(const ThixUrgentScreen()))),
-        GoRoute(path: '/thix-urgent/chambre-de-crise', name: 'chambreDeCrise', pageBuilder: (_, state) => NoTransitionPage(child: ChambreDeCriseScreen(criseId: ((state.extra as Map<String, dynamic>?)?['criseId'] as String?) ?? 'crise_${DateTime.now().millisecondsSinceEpoch}', type: ((state.extra as Map<String, dynamic>?)?['type'] as EmergencyType?) ?? EmergencyType.police))),
-        GoRoute(path: '/thix-urgent/config/gardiens', name: 'thixUrgentGardiens', pageBuilder: (_, __) => const NoTransitionPage(child: GardiensConfigPage())),
-
+        // === THIX RETROUVE ===
+        GoRoute(
+          path: '/thix-retrouve',
+          name: 'thixRetrouve',
+          pageBuilder: (_, __) => const NoTransitionPage(child: ThixRetrouveScreen()),
+        ),
+        GoRoute(
+          path: '/thix-retrouve/detail',
+          name: 'thixRetrouveDetail',
+          pageBuilder: (_, __) => const NoTransitionPage(child: ObjectDetailPage()),
+        ),
+        GoRoute(
+          path: '/thix-retrouve/ai-match',
+          name: 'thixRetrouveAiMatch',
+          pageBuilder: (_, __) => const NoTransitionPage(child: AiMatchPage()),
+        ),
+        GoRoute(
+          path: '/thix-retrouve/mes-recherches',
+          name: 'thixRetrouveMesRecherches',
+          pageBuilder: (_, __) => const NoTransitionPage(child: MesRecherchesPage()),
+        ),
+        GoRoute(
+          path: '/thix-retrouve/declarer-perdu',
+          name: 'thixRetrouveDeclarerPerdu',
+          pageBuilder: (_, __) => const NoTransitionPage(
+            child: DeclarerObjetPage(type: StatutObjet.perdu),
+          ),
+        ),
+        GoRoute(
+          path: '/thix-retrouve/declarer-trouve',
+          name: 'thixRetrouveDeclarerTrouve',
+          pageBuilder: (_, __) => const NoTransitionPage(
+            child: DeclarerObjetPage(type: StatutObjet.trouve),
+          ),
+        ),
+        GoRoute(
+          path: '/thix-retrouve/carte',
+          name: 'thixRetrouveCarte',
+          pageBuilder: (_, __) => const NoTransitionPage(child: CarteSignalementsPage()),
+        ),
         // === THIX SANTE ===
         GoRoute(path: AppRoutes.thixSante, redirect: (_, __) => AppRoutes.thixSanteDashboard),
         GoRoute(path: AppRoutes.thixSanteDashboard, builder: (c, s) => const PatientDashboardPage()),
