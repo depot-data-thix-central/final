@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/supabase/supabase_config.dart';
 import '../models/objet_model.dart';
@@ -10,35 +10,39 @@ class ObjetService {
       : _client = client ?? SupabaseConfig.client;
 
   static const String _table = 'thix_objets';
-  static const String _bucket = 'objets'; 
+  static const String _bucket = 'objets';
 
-  // ── Upload photo ──────────────────────────────────────────────
-  Future<String?> uploadPhoto(File file) async {
-  try {
-    final userId = SupabaseConfig.currentUser?.id ?? 'anonymous';
-    final ext = file.path.split('.').last.toLowerCase();
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
-    final path = '$userId/$fileName';   // dossier = userId
+  /// Upload photo (Web + Mobile)
+  /// [bytes] = contenu du fichier
+  /// [fileName] = nom avec extension (ex: photo.jpg)
+  Future<String?> uploadPhotoBytes({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    try {
+      final userId = SupabaseConfig.currentUser?.id ?? 'anonymous';
+      final ext = fileName.split('.').last.toLowerCase();
+      final safeName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final path = '$userId/$safeName';
 
-    await _client.storage.from(_bucket).upload(
-      path,
-      file,
-      fileOptions: const FileOptions(
-        cacheControl: '3600',
-        upsert: false,
-      ),
-    );
+      await _client.storage.from(_bucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(
+              cacheControl: '3600',
+              upsert: false,
+              contentType: 'image/jpeg',
+            ),
+          );
 
-    // URL publique
-    final publicUrl = _client.storage.from(_bucket).getPublicUrl(path);
-    return publicUrl;
-  } catch (e) {
-    print('Erreur uploadPhoto: $e');
-    rethrow;
+      final publicUrl = _client.storage.from(_bucket).getPublicUrl(path);
+      return publicUrl;
+    } catch (e) {
+      print('Erreur uploadPhotoBytes: $e');
+      rethrow;
+    }
   }
-}
 
-  // ── Déclarer un objet ─────────────────────────────────────────
   Future<ObjetModel?> declarerObjet({
     required String titre,
     required String description,
@@ -49,14 +53,17 @@ class ObjetService {
     String? contactInfo,
     double? latitude,
     double? longitude,
-    File? photo,
+    Uint8List? photoBytes,
+    String? photoFileName,
   }) async {
     try {
       String? imageUrl;
 
-      // Upload photo si présente
-      if (photo != null) {
-        imageUrl = await uploadPhoto(photo);
+      if (photoBytes != null && photoBytes.isNotEmpty) {
+        imageUrl = await uploadPhotoBytes(
+          bytes: photoBytes,
+          fileName: photoFileName ?? 'photo.jpg',
+        );
       }
 
       final userId = SupabaseConfig.currentUser?.id;
@@ -84,7 +91,6 @@ class ObjetService {
     }
   }
 
-  // ── Liste objets récents ──────────────────────────────────────
   Future<List<ObjetModel>> getObjetsRecents({int limit = 30}) async {
     try {
       final res = await _client
@@ -102,7 +108,6 @@ class ObjetService {
     }
   }
 
-  // ── Mes objets ────────────────────────────────────────────────
   Future<List<ObjetModel>> getMesObjets() async {
     final userId = SupabaseConfig.currentUser?.id;
     if (userId == null) return [];
@@ -123,7 +128,6 @@ class ObjetService {
     }
   }
 
-  // ── Matching simple ───────────────────────────────────────────
   Future<List<ObjetModel>> rechercherCorrespondances(ObjetModel perdu) async {
     try {
       final keyword = perdu.titre.split(' ').first;
