@@ -106,6 +106,16 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
   int _previousTextLength = 0;
 
   // ─── LOGIQUE DE COMPTE (SÉCURITÉ & LIMITES) ───
+  // 5 niveaux : gratuit · standard · premium · entreprise · officiel
+  //
+  // gratuit     : texte 280 car. · 1 photo · pas de vidéo · pas de formatage
+  //               · audio 30s max, 3 publications vocales/jour · fact-check obligatoire
+  // standard    : texte illimité · 4 photos · vidéo · formatage/fond couleur
+  //               · audio 60s max, illimité/jour · fact-check obligatoire
+  // premium     : full (standard) + sondage + challenge (4 options max)
+  //               · audio 120s max, illimité/jour · fact-check obligatoire
+  // entreprise  : full (premium) + sondage 8 options · fact-check bypass
+  // officiel    : full (premium) + sondage 8 options · fact-check bypass
   bool _isLoadingLimits = true;
   String _userTier = 'gratuit'; // 'gratuit', 'standard', 'premium', 'entreprise', 'officiel'
   int _audioPostsToday = 0;
@@ -122,10 +132,13 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
   bool get _canCreatePoll => _isPremium || _isEnterprise || _isOfficial;
   bool get _canCreateChallenge => _isPremium || _isEnterprise || _isOfficial;
   bool get _skipAICheck => _isEnterprise || _isOfficial;
-  
+  bool get _hasWidePollOptions => _isEnterprise || _isOfficial; // 8 options au lieu de 4
+
   int get _maxTextLength => _isFree ? 280 : 5000;
   int get _maxPhotos => _isFree ? 1 : (_isStandard ? 4 : 10);
   int get _maxAudioDuration => _isFree ? 30 : (_isStandard ? 60 : 120);
+  bool get _hasAudioDailyQuota => _isFree; // seul le gratuit est limité à 3/jour
+  static const int _freeAudioDailyLimit = 3;
 
   @override
   void initState() {
@@ -286,9 +299,9 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Quota journalier atteint', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.red)),
-        content: const Text(
-          "Vous avez atteint votre quota de 3 publications vocales par jour.\n\nVotre quota sera réinitialisé dans 24h, ou vous pouvez mettre à niveau votre abonnement pour publier sans limite.",
-          style: TextStyle(fontSize: 14, color: _C.textDark, height: 1.4),
+        content: Text(
+          "Vous avez atteint votre quota de $_freeAudioDailyLimit publications vocales par jour.\n\nVotre quota sera réinitialisé dans 24h, ou vous pouvez mettre à niveau votre abonnement pour publier sans limite.",
+          style: const TextStyle(fontSize: 14, color: _C.textDark, height: 1.4),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Compris', style: TextStyle(color: _C.textSecondary))),
@@ -330,7 +343,7 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
   }
 
   Future<void> _startRecording() async {
-    if (_isFree && _audioPostsToday >= 3) {
+    if (_hasAudioDailyQuota && _audioPostsToday >= _freeAudioDailyLimit) {
       _showAudioLimitDialog();
       return;
     }
@@ -351,7 +364,7 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!mounted) return;
         setState(() => _recordDuration++);
-        // Limite dynamique
+        // Limite dynamique selon le palier
         if (_recordDuration >= _maxAudioDuration) {
           _stopRecording();
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Durée maximale atteinte ($_maxAudioDuration s)')));
@@ -529,6 +542,7 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
         'is_misinformation': isMisinfo, 'fact_check_message': fcMessage, 'fact_check_severity': fcSeverity,
         'image_urls': uploadedImages, 'video_urls': uploadedVideos, 'media_urls': allMedia,
         'media_url': allMedia.isNotEmpty ? allMedia.first : null, 'community_id': widget.communityId, 'post_type': 'standard',
+        if (_audioBytes != null) 'audio_duration_seconds': _recordDuration,
       };
 
       if (_postTypeMode == 0 && _audioBytes != null && _images.isEmpty && _videos.isEmpty) payload['post_type'] = 'audio';
@@ -836,7 +850,8 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
                             ),
                           );
                         }),
-                        if (_pollOptionControllers.length < (_isEnterprise ? 8 : 4))
+                        // Entreprise + Officiel : 8 options max · Premium : 4 options max
+                        if (_pollOptionControllers.length < (_hasWidePollOptions ? 8 : 4))
                           TextButton.icon(
                             onPressed: () => setState(() => _pollOptionControllers.add(TextEditingController())),
                             icon: const Icon(Icons.add_circle_outline, size: 17),
