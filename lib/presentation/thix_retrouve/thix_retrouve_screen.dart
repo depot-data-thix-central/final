@@ -284,6 +284,7 @@ class _ThixRetrouveScreenState extends ConsumerState<ThixRetrouveScreen> {
                                         time: _formatDate(obj.date),
                                         description: obj.description,
                                         reward: obj.recompense ?? '',
+                                        imageUrl: obj.imageUrl, // <--- AJOUTÉ ICI
                                       ),
                                     ),
                                   );
@@ -337,11 +338,10 @@ class _ThixRetrouveScreenState extends ConsumerState<ThixRetrouveScreen> {
 
   // ── Helpers ─────────────────────────────────────────────────────
 
-    String _formatDate(DateTime date) {
+  String _formatDate(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final dateOnly = DateTime(date.year, date.month, date.day);
-    // CORRECTION ICI : Utilisation de $ au lieu de \( \)
     final timeStr = '${date.hour}h${date.minute.toString().padLeft(2, '0')}';
 
     if (dateOnly == today) {
@@ -350,7 +350,6 @@ class _ThixRetrouveScreenState extends ConsumerState<ThixRetrouveScreen> {
     if (dateOnly == today.subtract(const Duration(days: 1))) {
       return 'Hier, $timeStr';
     }
-    // CORRECTION ICI AUSSI
     return '${date.day}/${date.month}/${date.year}';
   }
 
