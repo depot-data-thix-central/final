@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb; // 1. Ajout pour détecter le Web
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -26,9 +25,9 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
 
   String? _categorie;
   bool _isLoading = false;
-  
-  // 2. CHANGEMENT : Utilisation de XFile au lieu de File pour la compatibilité Web
+
   XFile? _photo;
+  Uint8List? _photoBytes;
 
   final _picker = ImagePicker();
 
@@ -55,7 +54,6 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
     super.dispose();
   }
 
-  // ── Choisir photo ─────────────────────────────────────────────
   Future<void> _pickPhoto() async {
     showModalBottomSheet(
       context: context,
@@ -76,8 +74,13 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                   imageQuality: 75,
                   maxWidth: 1200,
                 );
-                // CHANGEMENT : On sauvegarde directement le XFile
-                if (x != null) setState(() => _photo = x);
+                if (x != null) {
+                  final bytes = await x.readAsBytes();
+                  setState(() {
+                    _photo = x;
+                    _photoBytes = bytes;
+                  });
+                }
               },
             ),
             ListTile(
@@ -90,17 +93,28 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                   imageQuality: 75,
                   maxWidth: 1200,
                 );
-                // CHANGEMENT : On sauvegarde directement le XFile
-                if (x != null) setState(() => _photo = x);
+                if (x != null) {
+                  final bytes = await x.readAsBytes();
+                  setState(() {
+                    _photo = x;
+                    _photoBytes = bytes;
+                  });
+                }
               },
             ),
             if (_photo != null)
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Supprimer la photo', style: TextStyle(color: Colors.red)),
+                title: const Text(
+                  'Supprimer la photo',
+                  style: TextStyle(color: Colors.red),
+                ),
                 onTap: () {
                   Navigator.pop(context);
-                  setState(() => _photo = null);
+                  setState(() {
+                    _photo = null;
+                    _photoBytes = null;
+                  });
                 },
               ),
           ],
@@ -109,22 +123,12 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
     );
   }
 
-  // ── Soumettre ─────────────────────────────────────────────────
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
       final service = ref.read(objetServiceProvider);
-
-      // Lire les bytes de la photo (marche Web + Mobile)
-      Uint8List? photoBytes;
-      String? photoFileName;
-
-      if (_photo != null) {
-        photoBytes = await _photo!.readAsBytes();
-        photoFileName = _photo!.name;
-      }
 
       await service.declarerObjet(
         titre: _titreCtrl.text,
@@ -136,8 +140,8 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             : null,
         categorie: _categorie,
         contactInfo: _contactCtrl.text.isEmpty ? null : _contactCtrl.text,
-        photoBytes: photoBytes,
-        photoFileName: photoFileName,
+        photoBytes: _photoBytes,
+        photoFileName: _photo?.name ?? 'photo.jpg',
       );
 
       if (mounted) {
@@ -170,6 +174,7 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
       }
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -183,7 +188,11 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
         ),
         title: Text(
           isPerdu ? "J'ai perdu un objet" : "J'ai trouvé un objet",
-          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87),
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
         ),
         centerTitle: true,
       ),
@@ -212,7 +221,11 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                       isPerdu
                           ? 'Déclarez l\'objet que vous avez perdu. La communauté et THIX IA vont vous aider à le retrouver.'
                           : 'Déclarez l\'objet que vous avez trouvé. Aidez quelqu\'un à le récupérer.',
-                      style: GoogleFonts.inter(fontSize: 13, color: Colors.white, height: 1.4),
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.white,
+                        height: 1.4,
+                      ),
                     ),
                   ),
                 ],
@@ -220,7 +233,7 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             ),
             const SizedBox(height: 24),
 
-            // ── Zone photo ──────────────────────────────────────
+            // Zone photo (Image.memory = Web + Mobile)
             GestureDetector(
               onTap: _pickPhoto,
               child: Container(
@@ -231,16 +244,16 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
-                child: _photo != null
+                child: _photoBytes != null
                     ? Stack(
                         fit: StackFit.expand,
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            // 3. CHANGEMENT : Affichage spécifique pour le Web vs Mobile
-                            child: kIsWeb
-                                ? Image.network(_photo!.path, fit: BoxFit.cover)
-                                : Image.file(File(_photo!.path), fit: BoxFit.cover),
+                            child: Image.memory(
+                              _photoBytes!,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                           Positioned(
                             top: 8,
@@ -251,7 +264,12 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                               child: IconButton(
                                 padding: EdgeInsets.zero,
                                 icon: const Icon(Icons.close, size: 18, color: Colors.white),
-                                onPressed: () => setState(() => _photo = null),
+                                onPressed: () {
+                                  setState(() {
+                                    _photo = null;
+                                    _photoBytes = null;
+                                  });
+                                },
                               ),
                             ),
                           ),
@@ -259,14 +277,20 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                             bottom: 8,
                             left: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.black54,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 'Changer',
-                                style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -279,12 +303,19 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                           const SizedBox(height: 10),
                           Text(
                             'Ajouter une photo',
-                            style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.w500),
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Caméra ou galerie',
-                            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[400]),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.grey[400],
+                            ),
                           ),
                         ],
                       ),
@@ -296,7 +327,8 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             TextFormField(
               controller: _titreCtrl,
               decoration: _inputDecoration('Ex: Téléphone Samsung Galaxy A54'),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Titre obligatoire' : null,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Titre obligatoire' : null,
             ),
             const SizedBox(height: 16),
 
@@ -304,7 +336,9 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             DropdownButtonFormField<String>(
               value: _categorie,
               decoration: _inputDecoration('Choisir une catégorie'),
-              items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+              items: _categories
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
               onChanged: (v) => setState(() => _categorie = v),
             ),
             const SizedBox(height: 16),
@@ -318,7 +352,8 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                     ? 'Couleur, marque, particularités, contenu...'
                     : 'Décrivez précisément l\'objet trouvé...',
               ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Description obligatoire' : null,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Description obligatoire' : null,
             ),
             const SizedBox(height: 16),
 
@@ -326,7 +361,8 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             TextFormField(
               controller: _lieuCtrl,
               decoration: _inputDecoration('Ex: THIX Center, Kiswahili'),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Lieu obligatoire' : null,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Lieu obligatoire' : null,
             ),
             const SizedBox(height: 16),
 
@@ -353,19 +389,29 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isPerdu ? const Color(0xFFF59E0B) : const Color(0xFF2563EB),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  backgroundColor:
+                      isPerdu ? const Color(0xFFF59E0B) : const Color(0xFF2563EB),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   elevation: 0,
                 ),
                 child: _isLoading
                     ? const SizedBox(
                         width: 24,
                         height: 24,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
                       )
                     : Text(
                         isPerdu ? 'Déclarer comme perdu' : 'Déclarer comme trouvé',
-                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
               ),
             ),
@@ -381,7 +427,11 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
+        style: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
+        ),
       ),
     );
   }
