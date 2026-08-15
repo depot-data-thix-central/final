@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb; // 1. Ajout pour détecter le Web
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -25,7 +26,9 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
 
   String? _categorie;
   bool _isLoading = false;
-  File? _photo;
+  
+  // 2. CHANGEMENT : Utilisation de XFile au lieu de File pour la compatibilité Web
+  XFile? _photo;
 
   final _picker = ImagePicker();
 
@@ -73,7 +76,8 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                   imageQuality: 75,
                   maxWidth: 1200,
                 );
-                if (x != null) setState(() => _photo = File(x.path));
+                // CHANGEMENT : On sauvegarde directement le XFile
+                if (x != null) setState(() => _photo = x);
               },
             ),
             ListTile(
@@ -86,7 +90,8 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                   imageQuality: 75,
                   maxWidth: 1200,
                 );
-                if (x != null) setState(() => _photo = File(x.path));
+                // CHANGEMENT : On sauvegarde directement le XFile
+                if (x != null) setState(() => _photo = x);
               },
             ),
             if (_photo != null)
@@ -122,7 +127,9 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             : null,
         categorie: _categorie,
         contactInfo: _contactCtrl.text.isEmpty ? null : _contactCtrl.text,
-        photo: _photo,
+        // CHANGEMENT : On évite de créer un "File" sur le web pour éviter le crash.
+        // Si vous êtes sur mobile, on convertit l'XFile en File.
+        photo: (!kIsWeb && _photo != null) ? File(_photo!.path) : null, 
       );
 
       if (mounted) {
@@ -223,7 +230,10 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            child: Image.file(_photo!, fit: BoxFit.cover),
+                            // 3. CHANGEMENT : Affichage spécifique pour le Web vs Mobile
+                            child: kIsWeb
+                                ? Image.network(_photo!.path, fit: BoxFit.cover)
+                                : Image.file(File(_photo!.path), fit: BoxFit.cover),
                           ),
                           Positioned(
                             top: 8,
