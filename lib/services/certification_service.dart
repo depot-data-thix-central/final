@@ -51,7 +51,7 @@ class CertificationService {
       final uid = _uid;
       if (uid == null) {
         return const CertificationInfo(
-          tier: CertificationTier.standard,
+          tier: CertificationTier.free,
           status: CertificationStatus.none,
         );
       }
@@ -65,7 +65,7 @@ class CertificationService {
 
       if (p == null) {
         return const CertificationInfo(
-          tier: CertificationTier.standard,
+          tier: CertificationTier.free,
           status: CertificationStatus.none,
         );
       }
@@ -81,7 +81,7 @@ class CertificationService {
     } catch (e) {
       debugPrint('❌ getMyCertification fallback: $e');
       return const CertificationInfo(
-        tier: CertificationTier.standard,
+        tier: CertificationTier.free,
         status: CertificationStatus.none,
       );
     }
@@ -97,6 +97,11 @@ class CertificationService {
       throw Exception(
         'Le niveau Officiel / Institutions est accessible uniquement sur invitation THIX.',
       );
+    }
+
+    // Le palier gratuit n'est pas une demande d'upgrade valide
+    if (requestedTier == CertificationTier.free) {
+      throw Exception('Le compte Gratuit est le niveau par défaut, aucune demande nécessaire.');
     }
 
     final uid = _uid;
