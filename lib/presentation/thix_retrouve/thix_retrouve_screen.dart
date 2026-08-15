@@ -338,19 +338,19 @@ class _ThixRetrouveScreenState extends ConsumerState<ThixRetrouveScreen> {
   // ── Helpers ─────────────────────────────────────────────────────
 
   String _formatDate(DateTime date) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final dateOnly = DateTime(date.year, date.month, date.day);
-  final timeStr = '\( {date.hour}h \){date.minute.toString().padLeft(2, '0')}';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final timeStr = '\( {date.hour}h \){date.minute.toString().padLeft(2, '0')}';
 
-  if (dateOnly == today) {
-    return 'Aujourd\'hui, $timeStr';
+    if (dateOnly == today) {
+      return 'Aujourd\'hui, $timeStr';
+    }
+    if (dateOnly == today.subtract(const Duration(days: 1))) {
+      return 'Hier, $timeStr';
+    }
+    return '\( {date.day}/ \){date.month}/${date.year}';
   }
-  if (dateOnly == today.subtract(const Duration(days: 1))) {
-    return 'Hier, $timeStr';
-  }
-  return '\( {date.day}/ \){date.month}/${date.year}';
-}
   IconData _iconForCategorie(String? cat) {
     switch (cat?.toLowerCase()) {
       case 'téléphone':
