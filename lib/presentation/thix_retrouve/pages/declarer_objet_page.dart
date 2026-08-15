@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/objet_model.dart';
+import '../providers/objet_providers.dart';
 
-class DeclarerObjetPage extends StatefulWidget {
-  final StatutObjet type; // perdu ou trouve
+class DeclarerObjetPage extends ConsumerStatefulWidget {
+  final StatutObjet type;
 
   const DeclarerObjetPage({super.key, required this.type});
 
   @override
-  State<DeclarerObjetPage> createState() => _DeclarerObjetPageState();
+  ConsumerState<DeclarerObjetPage> createState() => _DeclarerObjetPageState();
 }
 
-class _DeclarerObjetPageState extends State<DeclarerObjetPage> {
+class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
   final _formKey = GlobalKey<FormState>();
   final _titreCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -49,23 +51,49 @@ class _DeclarerObjetPageState extends State<DeclarerObjetPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    // TODO: Appel service Supabase / API
-    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      final service = ref.read(objetServiceProvider);
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isPerdu
-                ? 'Objet perdu déclaré avec succès ! THIX IA recherche des correspondances...'
-                : 'Objet trouvé déclaré. Merci de contribuer à la communauté !',
-          ),
-          backgroundColor: const Color(0xFF16A34A),
-          behavior: SnackBarBehavior.floating,
-        ),
+      await service.declarerObjet(
+        titre: _titreCtrl.text,
+        description: _descCtrl.text,
+        statut: widget.type,
+        lieu: _lieuCtrl.text,
+        recompense: isPerdu && _recompenseCtrl.text.isNotEmpty
+            ? _recompenseCtrl.text
+            : null,
+        categorie: _categorie,
+        contactInfo: _contactCtrl.text.isEmpty ? null : _contactCtrl.text,
       );
-      Navigator.pop(context, true);
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isPerdu
+                  ? 'Objet perdu déclaré ! THIX IA cherche des correspondances...'
+                  : 'Objet trouvé déclaré. Merci pour la communauté !',
+            ),
+            backgroundColor: const Color(0xFF16A34A),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        Navigator.pop(context, true); // true = rafraîchir la liste
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur : $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -91,7 +119,7 @@ class _DeclarerObjetPageState extends State<DeclarerObjetPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Header coloré
+            // Header
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -123,17 +151,17 @@ class _DeclarerObjetPageState extends State<DeclarerObjetPage> {
             ),
             const SizedBox(height: 24),
 
-            // Photo placeholder
+            // Photo (placeholder pour plus tard)
             GestureDetector(
               onTap: () {
-                // TODO: Image picker
+                // TODO: image_picker
               },
               child: Container(
                 height: 140,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+                  border: Border.all(color: Colors.grey.shade300),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -185,7 +213,7 @@ class _DeclarerObjetPageState extends State<DeclarerObjetPage> {
             _buildLabel(isPerdu ? 'Lieu de perte *' : 'Lieu de trouvaille *'),
             TextFormField(
               controller: _lieuCtrl,
-              decoration: _inputDecoration('Ex: THIX Center, Kiswahili / Parking visiteurs'),
+              decoration: _inputDecoration('Ex: THIX Center, Kiswahili'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Lieu obligatoire' : null,
             ),
             const SizedBox(height: 16),
