@@ -52,6 +52,8 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
   bool _isFrontCamera = true;
   bool _isBeautyEnabled = false;
   
+  String? _errorMessage; // ✅ AJOUT : Pour afficher l'erreur Agora sur le fond bleu
+
   int _viewerCount = 0; 
   final List<int> _coHostUids = []; 
   
@@ -76,7 +78,7 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
     try {
       if (!kIsWeb) await [Permission.camera, Permission.microphone].request();
 
-      // ✅ APPEL CORRIGÉ DE LA FUNCTION SUPABASE
+      // ✅ APPEL DE LA FUNCTION SUPABASE
       final response = await Supabase.instance.client.functions.invoke(
         'agora-token',
         body: {
@@ -133,8 +135,10 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
       debugPrint('Erreur Agora: $e');
-      // ✅ AFFICHAGE CLAIR DE L'ERREUR DANS L'UI
       if (mounted) {
+        // ✅ On sauvegarde l'erreur pour l'afficher au centre de l'écran
+        setState(() => _errorMessage = e.toString()); 
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erreur Live : $e'),
@@ -263,7 +267,7 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
         resizeToAvoidBottomInset: true,
         body: Stack(
           children: [
-            // 1. FOND VIDÉO HÔTE
+            // 1. FOND VIDÉO HÔTE OU CHARGEMENT/ERREUR (✅ CORRIGÉ)
             Positioned.fill(
               child: _isInitialized && !_isVideoOff
                   ? SizedBox.expand(
@@ -280,12 +284,33 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
                         ),
                       ),
                     )
-                  : Container(color: _C.bgDark, child: const Center(child: Icon(Icons.videocam_off_rounded, size: 80, color: Colors.white24))),
+                  : Container(
+                      color: _C.bgDark,
+                      child: Center(
+                        child: _errorMessage != null
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Text(
+                                  "Erreur d'initialisation :\n$_errorMessage",
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: _C.red, fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                              )
+                            : const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(color: _C.primary),
+                                  SizedBox(height: 16),
+                                  Text("Connexion au direct en cours...", style: TextStyle(color: _C.textMuted)),
+                                ],
+                              ),
+                      ),
+                    ),
             ),
 
             // 2. DÉGRADÉS LISIBILITÉ
             Positioned(top: 0, left: 0, right: 0, height: 140, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.6), Colors.transparent])))),
-            Positioned(bottom: 0, left: 0, right: 0, height: 300, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])))),
+            Positioned(bottom: 0, left: 0, right: 0, height: 350, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])))),
 
             // 3. VIDÉOS DES CO-HÔTES (Flottantes)
             if (_coHostUids.isNotEmpty)
@@ -322,7 +347,6 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
                       decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(30)),
                       child: Row(
                         children: [
-                          // ✅ CACHED NETWORK IMAGE INTÉGRÉ
                           CircleAvatar(
                             radius: 16,
                             backgroundColor: _C.primary,
@@ -372,22 +396,29 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
               ),
             ),
 
-            // 5. BARRE D'ACTIONS LATÉRALE
+            // 5. BARRE D'ACTIONS LATÉRALE (Uniquement les filtres et effets ici maintenant)
             Positioned(
-              right: 16, bottom: 100,
+              right: 16, bottom: 160,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  _SideActionButton(icon: Icons.flip_camera_ios_rounded, label: 'Tourner', onTap: () async { await _engine.switchCamera(); setState(() => _isFrontCamera = !_isFrontCamera); }),
-                  _SideActionButton(icon: _isBeautyEnabled ? Icons.face_retouching_natural_rounded : Icons.face_rounded, label: 'Beauté', color: _isBeautyEnabled ? _C.primary : _C.textMain, onTap: () async { setState(() => _isBeautyEnabled = !_isBeautyEnabled); await _engine.setBeautyEffectOptions(enabled: _isBeautyEnabled, options: const BeautyOptions(lighteningContrastLevel: LighteningContrastLevel.lighteningContrastNormal, lighteningLevel: 0.7, smoothnessLevel: 0.5, rednessLevel: 0.1)); }),
-                  _SideActionButton(icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded, label: _isMuted ? 'Muet' : 'Mic', onTap: () { setState(() => _isMuted = !_isMuted); _engine.muteLocalAudioStream(_isMuted); }),
+                  _SideActionButton(
+                    icon: _isBeautyEnabled ? Icons.face_retouching_natural_rounded : Icons.face_rounded, 
+                    label: 'Beauté', 
+                    color: _isBeautyEnabled ? _C.primary : _C.textMain, 
+                    onTap: () async { 
+                      setState(() => _isBeautyEnabled = !_isBeautyEnabled); 
+                      await _engine.setBeautyEffectOptions(enabled: _isBeautyEnabled, options: const BeautyOptions(lighteningContrastLevel: LighteningContrastLevel.lighteningContrastNormal, lighteningLevel: 0.7, smoothnessLevel: 0.5, rednessLevel: 0.1)); 
+                    }
+                  ),
+                  // Les autres boutons ont été déplacés dans la barre du bas
                 ],
               ),
             ),
 
             // 6. CHAT
             Positioned(
-              left: 16, bottom: 80, width: MediaQuery.of(context).size.width * 0.7, height: 250,
+              left: 16, bottom: 160, width: MediaQuery.of(context).size.width * 0.7, height: 250,
               child: ShaderMask(
                 shaderCallback: (Rect bounds) => const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.white, Colors.white], stops: [0.0, 0.2, 1.0]).createShader(bounds),
                 blendMode: BlendMode.dstIn,
@@ -416,9 +447,9 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
               ),
             ),
 
-            // 7. INPUT CHAT
+            // 7. INPUT CHAT (✅ Remonté pour faire de la place à la barre du bas)
             Positioned(
-              left: 16, right: 16, bottom: 20,
+              left: 16, right: 16, bottom: 90,
               child: SafeArea(
                 top: false,
                 child: Row(
@@ -441,6 +472,61 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
               ),
             ),
 
+            // 8. BARRE DE CONTRÔLES EN BAS (✅ NOUVEAU)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.only(bottom: 24, top: 12, left: 16, right: 16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _BottomControlButton(
+                      icon: _isVideoOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+                      label: _isVideoOff ? 'Cam off' : 'Caméra',
+                      color: _isVideoOff ? _C.red : _C.textMain,
+                      onTap: () async {
+                        setState(() => _isVideoOff = !_isVideoOff);
+                        if (_isVideoOff) {
+                          await _engine.disableVideo();
+                        } else {
+                          await _engine.enableVideo();
+                        }
+                      },
+                    ),
+                    _BottomControlButton(
+                      icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                      label: _isMuted ? 'Muet' : 'Micro',
+                      color: _isMuted ? _C.red : _C.textMain,
+                      onTap: () {
+                        setState(() => _isMuted = !_isMuted);
+                        _engine.muteLocalAudioStream(_isMuted);
+                      },
+                    ),
+                    _BottomControlButton(
+                      icon: Icons.flip_camera_ios_rounded,
+                      label: 'Tourner',
+                      onTap: () async {
+                        await _engine.switchCamera();
+                        setState(() => _isFrontCamera = !_isFrontCamera);
+                      },
+                    ),
+                    _BottomControlButton(
+                      icon: Icons.favorite_rounded,
+                      label: "J'aime",
+                      color: _C.primary,
+                      onTap: _triggerHeartAnimation,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             ..._floatingHearts,
           ],
         ),
@@ -450,12 +536,45 @@ class _LiveBroadcastScreenState extends State<LiveBroadcastScreen> with TickerPr
 }
 
 // ─── COMPOSANTS ANNEXES ───
+
+// Le bouton pour la barre latérale (Beauté)
 class _SideActionButton extends StatelessWidget {
   final IconData icon; final String label; final VoidCallback onTap; final Color color;
   const _SideActionButton({required this.icon, required this.label, required this.onTap, this.color = _C.textMain});
   @override Widget build(BuildContext context) { return Padding(padding: const EdgeInsets.only(bottom: 16), child: GestureDetector(onTap: onTap, child: Column(children: [Container(padding: const EdgeInsets.all(10), decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle), child: Icon(icon, color: color, size: 22)), const SizedBox(height: 4), Text(label, style: const TextStyle(color: _C.textMain, fontSize: 10, fontWeight: FontWeight.w600, shadows: [Shadow(color: Colors.black54, blurRadius: 2)]))]))); }
 }
 
+// Le nouveau bouton pour la barre du bas
+class _BottomControlButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _BottomControlButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color = Colors.white,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 6),
+          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+// Les coeurs flottants (Intacts)
 class _AnimatedHeart extends StatefulWidget {
   final Color color; final VoidCallback onComplete;
   const _AnimatedHeart({super.key, required this.color, required this.onComplete});
