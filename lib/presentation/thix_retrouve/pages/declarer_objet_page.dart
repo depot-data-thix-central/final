@@ -117,6 +117,15 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
     try {
       final service = ref.read(objetServiceProvider);
 
+      // Lire les bytes de la photo (marche Web + Mobile)
+      Uint8List? photoBytes;
+      String? photoFileName;
+
+      if (_photo != null) {
+        photoBytes = await _photo!.readAsBytes();
+        photoFileName = _photo!.name;
+      }
+
       await service.declarerObjet(
         titre: _titreCtrl.text,
         description: _descCtrl.text,
@@ -127,9 +136,8 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             : null,
         categorie: _categorie,
         contactInfo: _contactCtrl.text.isEmpty ? null : _contactCtrl.text,
-        // CHANGEMENT : On évite de créer un "File" sur le web pour éviter le crash.
-        // Si vous êtes sur mobile, on convertit l'XFile en File.
-        photo: (!kIsWeb && _photo != null) ? File(_photo!.path) : null, 
+        photoBytes: photoBytes,
+        photoFileName: photoFileName,
       );
 
       if (mounted) {
@@ -162,7 +170,6 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
       }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
