@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/objet_model.dart';
 import '../providers/objet_providers.dart';
 
@@ -23,6 +25,9 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
 
   String? _categorie;
   bool _isLoading = false;
+  File? _photo;
+
+  final _picker = ImagePicker();
 
   final List<String> _categories = [
     'Téléphone',
@@ -47,6 +52,59 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
     super.dispose();
   }
 
+  // ── Choisir photo ─────────────────────────────────────────────
+  Future<void> _pickPhoto() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Prendre une photo'),
+              onTap: () async {
+                Navigator.pop(context);
+                final x = await _picker.pickImage(
+                  source: ImageSource.camera,
+                  imageQuality: 75,
+                  maxWidth: 1200,
+                );
+                if (x != null) setState(() => _photo = File(x.path));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choisir depuis la galerie'),
+              onTap: () async {
+                Navigator.pop(context);
+                final x = await _picker.pickImage(
+                  source: ImageSource.gallery,
+                  imageQuality: 75,
+                  maxWidth: 1200,
+                );
+                if (x != null) setState(() => _photo = File(x.path));
+              },
+            ),
+            if (_photo != null)
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Supprimer la photo', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() => _photo = null);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Soumettre ─────────────────────────────────────────────────
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -64,6 +122,7 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             : null,
         categorie: _categorie,
         contactInfo: _contactCtrl.text.isEmpty ? null : _contactCtrl.text,
+        photo: _photo,
       );
 
       if (mounted) {
@@ -81,7 +140,7 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
           ),
         );
 
-        Navigator.pop(context, true); // true = rafraîchir la liste
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -139,11 +198,7 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                       isPerdu
                           ? 'Déclarez l\'objet que vous avez perdu. La communauté et THIX IA vont vous aider à le retrouver.'
                           : 'Déclarez l\'objet que vous avez trouvé. Aidez quelqu\'un à le récupérer.',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: Colors.white,
-                        height: 1.4,
-                      ),
+                      style: GoogleFonts.inter(fontSize: 13, color: Colors.white, height: 1.4),
                     ),
                   ),
                 ],
@@ -151,29 +206,71 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             ),
             const SizedBox(height: 24),
 
-            // Photo (placeholder pour plus tard)
+            // ── Zone photo ──────────────────────────────────────
             GestureDetector(
-              onTap: () {
-                // TODO: image_picker
-              },
+              onTap: _pickPhoto,
               child: Container(
-                height: 140,
+                height: 180,
+                width: double.infinity,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add_a_photo_outlined, size: 36, color: Colors.grey[400]),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Ajouter une photo',
-                      style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[500]),
-                    ),
-                  ],
-                ),
+                child: _photo != null
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Image.file(_photo!, fit: BoxFit.cover),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: Colors.black54,
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.close, size: 18, color: Colors.white),
+                                onPressed: () => setState(() => _photo = null),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 8,
+                            left: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Changer',
+                                style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_a_photo_outlined, size: 40, color: Colors.grey[400]),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Ajouter une photo',
+                            style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Caméra ou galerie',
+                            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[400]),
+                          ),
+                        ],
+                      ),
               ),
             ),
             const SizedBox(height: 20),
@@ -190,9 +287,7 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
             DropdownButtonFormField<String>(
               value: _categorie,
               decoration: _inputDecoration('Choisir une catégorie'),
-              items: _categories
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
+              items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
               onChanged: (v) => setState(() => _categorie = v),
             ),
             const SizedBox(height: 16),
@@ -253,11 +348,7 @@ class _DeclarerObjetPageState extends ConsumerState<DeclarerObjetPage> {
                       )
                     : Text(
                         isPerdu ? 'Déclarer comme perdu' : 'Déclarer comme trouvé',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
+                        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
                       ),
               ),
             ),
