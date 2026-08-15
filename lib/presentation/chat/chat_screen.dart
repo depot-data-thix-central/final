@@ -34,6 +34,11 @@ import 'package:thix_id/presentation/chat/call/providers/call_provider.dart';
 import 'package:thix_id/presentation/chat/providers/chat_providers.dart';
 import 'package:thix_id/presentation/chat/providers/chat_list_provider.dart';
 
+// ✅ Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
+
 // Messages provider (family)
 final chatMessagesProvider = StateNotifierProvider.family<ChatMsgNotifier, List<ChatMessage>, String>((ref, conversationId) {
   return ChatMsgNotifier(ref.read(chatServiceProvider), conversationId);
@@ -1041,7 +1046,55 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.conversation.displayName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: ThixPolicy.textMain), maxLines: 1, overflow: TextOverflow.ellipsis),
+                // ✅ AJOUT DE LA CERTIFICATION VIA UN CONSUMER
+                Consumer(
+                  builder: (context, ref, _) {
+                    CertificationTier? tier;
+                    CertificationStatus? status;
+                    bool isCertified = false;
+                    bool isLegacyVerified = false;
+
+                    if (!widget.conversation.isGroup) {
+                      final myId = _chatService.currentUserId;
+                      final otherId = widget.conversation.participantIds.firstWhere((id) => id != myId, orElse: () => '');
+                      if (otherId.isNotEmpty) {
+                        final profileData = ref.watch(userProfileProvider(otherId)).valueOrNull;
+                        if (profileData != null) {
+                          tier = CertificationTierX.parse(profileData['certification_tier']);
+                          status = CertificationStatusX.parse(profileData['certification_status']);
+                          isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+                          isLegacyVerified = profileData['is_verified'] == true;
+                        }
+                      }
+                    }
+
+                    return Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.conversation.displayName, 
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: ThixPolicy.textMain), 
+                            maxLines: 1, 
+                            overflow: TextOverflow.ellipsis
+                          ),
+                        ),
+                        if (isCertified)
+                          CertificationNameBadge(
+                            tier: tier,
+                            status: status,
+                            showLabel: false,
+                            iconSize: 15,
+                            padding: const EdgeInsets.only(left: 4),
+                          )
+                        else if (isLegacyVerified)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+                          ),
+                      ],
+                    );
+                  },
+                ),
                 if (!widget.conversation.isGroup && _otherParticipant != null)
                   Text(_getPresenceText(_otherParticipant!), style: TextStyle(fontSize: 12, color: _isOnline ? ThixPolicy.success : ThixPolicy.textSecondary, fontWeight: _isOnline ? FontWeight.w600 : FontWeight.w400))
                 else if (widget.conversation.isGroup)
