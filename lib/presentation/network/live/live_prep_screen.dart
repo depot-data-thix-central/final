@@ -109,7 +109,7 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
         context,
         MaterialPageRoute(
           builder: (context) => LiveBroadcastScreen(
-            title: title,
+            // SUPPRESSION DE "title: title," QUI CAUSAIT L'ERREUR
             isVideoEnabled: _isVideoEnabled,
             isMicEnabled: _isMicEnabled,
             liveId: liveId,           // 🌟 Passé à l'écran suivant
