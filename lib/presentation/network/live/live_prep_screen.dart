@@ -26,21 +26,110 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
 
   RtcEngine? _engine;
   bool _isEngineReady = false;
-  bool _isStartingLive = false; // 🌟 État de chargement
+  bool _isStartingLive = false; 
 
   @override
   void initState() {
     super.initState();
-    _initPreviewAgora();
+    // 🌟 Au lieu d'initialiser Agora direct, on vérifie les permissions en premier
+    _checkPermissionsAndInit();
   }
 
-  Future<void> _initPreviewAgora() async {
-    try {
-      if (!kIsWeb) {
-        await [Permission.camera, Permission.microphone].request();
+  // =========================================================
+  // 1. NOUVELLE FONCTION : GESTION DES PERMISSIONS (UX / PLAY STORE)
+  // =========================================================
+  Future<void> _checkPermissionsAndInit() async {
+    if (kIsWeb) {
+      await _initPreviewAgora();
+      return;
+    }
+
+    var cameraStatus = await Permission.camera.status;
+    var micStatus = await Permission.microphone.status;
+
+    // Si les permissions ne sont pas encore accordées
+    if (cameraStatus.isDenied || micStatus.isDenied) {
+      if (!mounted) return;
+
+      // 🚨 Affichage de l'explication (Prominent Disclosure pour Google)
+      bool? userAgreed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false, // Force l'utilisateur à répondre
+        builder: (context) => AlertDialog(
+          backgroundColor: _C.bgDark,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Colors.white12, width: 1),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.privacy_tip_rounded, color: _C.red, size: 28),
+              SizedBox(width: 10),
+              Text(
+                "Autorisations",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Pour démarrer votre direct sur THIX Media, l'application a besoin d'accéder à votre caméra et votre microphone. \n\nCes accès sont utilisés uniquement pendant la diffusion.",
+            style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false), // Refus
+              child: const Text("Annuler", style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _C.red,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(context, true), // Acceptation
+              child: const Text("Compris", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+
+      // Si l'utilisateur clique sur "Annuler", on le ramène à l'écran précédent
+      if (userAgreed != true) {
+        if (mounted) Navigator.pop(context);
+        return;
       }
 
-      String appId = "96ed392d17c74fe684bbb9d4a031ad12"; 
+      // Si "Compris", on lance la vraie demande système Android/iOS
+      Map<Permission, PermissionStatus> statuses = await [
+        Permission.camera,
+        Permission.microphone,
+      ].request();
+
+      // Vérification finale
+      if (statuses[Permission.camera]!.isGranted && statuses[Permission.microphone]!.isGranted) {
+        await _initPreviewAgora();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Permissions refusées. Impossible de lancer le direct.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          Navigator.pop(context);
+        }
+      }
+    } else {
+      // Si on a déjà les permissions (ex: 2ème ouverture de l'écran)
+      await _initPreviewAgora();
+    }
+  }
+
+  // =========================================================
+  // 2. INITIALISATION AGORA (Allégée de la demande de permission)
+  // =========================================================
+  Future<void> _initPreviewAgora() async {
+    try {
+      String appId = "96ed392d17c74fe684bbb9d4a031ad12"; // Pensez à utiliser .env en production !
 
       _engine = createAgoraRtcEngine();
       await _engine!.initialize(RtcEngineContext(
@@ -80,10 +169,8 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception("Vous devez être connecté");
 
-      // 1. Générer un nom de canal unique
       final channelName = 'live_${user.id}_${DateTime.now().millisecondsSinceEpoch}';
 
-      // 2. 🚀 Enregistrer le direct dans Supabase
       final response = await Supabase.instance.client
           .from('live_sessions')
           .insert({
@@ -97,23 +184,20 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
 
       final liveId = response['id'].toString();
 
-      // 3. Arrêter le preview
       if (_isEngineReady && _engine != null) {
         await _engine!.stopPreview();
       }
 
       if (!mounted) return;
 
-      // 4. Lancer l'écran de diffusion
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (context) => LiveBroadcastScreen(
-            // SUPPRESSION DE "title: title," QUI CAUSAIT L'ERREUR
             isVideoEnabled: _isVideoEnabled,
             isMicEnabled: _isMicEnabled,
-            liveId: liveId,           // 🌟 Passé à l'écran suivant
-            channelName: channelName, // 🌟 Passé à l'écran suivant
+            liveId: liveId,           
+            channelName: channelName, 
           ),
         ),
       );
