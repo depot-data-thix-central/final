@@ -64,16 +64,16 @@ class _CourseCreatePageState extends ConsumerState<CourseCreatePage> {
   bool _uploadingCertSign = false;
 
   static const _templates = <(String, String, Color)>[
-    ('classic_navy', 'Classic Navy', Color(0xFF1E3A5F)),
-    ('modern_minimal', 'Modern Minimal', Color(0xFF334155)),
-    ('royal_gold', 'Royal Gold', Color(0xFFB45309)),
+    ('classic_navy', 'Classic Navy', Color(0xFF0B1F3A)),
+    ('modern_minimal', 'Modern Minimal', Color(0xFF0F172A)),
+    ('royal_gold', 'Royal Gold', Color(0xFF10206B)),
     ('academic_serif', 'Academic Serif', Color(0xFF1E293B)),
-    ('tech_blue', 'Tech Blue', Color(0xFF0369A1)),
-    ('emerald_elite', 'Emerald Elite', Color(0xFF047857)),
-    ('crimson_honor', 'Crimson Honor', Color(0xFFB91C1C)),
-    ('slate_pro', 'Slate Pro', Color(0xFF475569)),
-    ('ivory_tradition', 'Ivory Tradition', Color(0xFF78716C)),
-    ('midnight_prestige', 'Midnight Prestige', Color(0xFF0F172A)),
+    ('tech_blue', 'Tech Blue', Color(0xFF0C4A6E)),
+    ('emerald_elite', 'Emerald Elite', Color(0xFF064E3B)),
+    ('crimson_honor', 'Crimson Honor', Color(0xFF7F1D1D)),
+    ('slate_pro', 'Slate Pro', Color(0xFF334155)),
+    ('ivory_tradition', 'Ivory Tradition', Color(0xFF44403C)),
+    ('midnight_prestige', 'Midnight Prestige', Color(0xFF020617)),
   ];
 
   @override
