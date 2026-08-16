@@ -1,5 +1,5 @@
+// lib/services/opportunity_service.dart
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -63,7 +63,7 @@ class OpportunityService {
         ascending: false,
         limit: 200,
       );
-      
+
       // Filtrage dynamique pour exclure les 'draft' (brouillons) côté client si la base renvoie tout
       final filteredRows = res.where((row) {
         final status = row['status'] ?? 'published';
@@ -71,12 +71,11 @@ class OpportunityService {
       }).toList();
 
       final items = _mapRows(filteredRows);
-      await _cache(items); 
+      await _cache(items);
       return items;
-      
     } catch (e) {
       debugPrint('OpportunityService.listOpportunities supabase failed err=$e');
-      
+
       // En cas de hors-ligne, lecture du cache local
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -87,8 +86,8 @@ class OpportunityService {
       } catch (cacheErr) {
         debugPrint('Lecture du cache échouée: $cacheErr');
       }
-      
-      return []; 
+
+      return [];
     }
   }
 
@@ -120,7 +119,7 @@ class OpportunityService {
   Future<OpportunityItem?> fetchOpportunity(String id) async {
     final v = id.trim();
     if (v.isEmpty) return null;
-    
+
     try {
       final res = await SupabaseService.select(
         table,
