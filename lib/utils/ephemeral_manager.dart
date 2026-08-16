@@ -1,6 +1,7 @@
 // lib/utils/ephemeral_manager.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'; // 🌟 CORRECTION 1 : Import indispensable pour StatefulWidget et State
 
 /// Gestionnaire des timers pour les messages éphémères
 class EphemeralManager {
@@ -72,7 +73,10 @@ class EphemeralManager {
   /// Retourne -1 si aucun timer n'est actif
   int getRemainingTime(String messageId) {
     if (!_timers.containsKey(messageId)) return -1;
-    final timer = _timers[messageId]!;
+    
+    // 🌟 CORRECTION 2 : Suppression de la variable "timer" non utilisée 
+    // qui causait le warning dans GitHub Actions
+    
     // On ne peut pas obtenir directement le temps restant avec Timer,
     // donc on retourne -1 (l'UI devra stocker le temps restant séparément)
     return -1;
