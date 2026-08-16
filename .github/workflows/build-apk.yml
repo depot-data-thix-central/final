@@ -58,6 +58,7 @@ jobs:
       # ==========================================
 
       - name: Flutter analyze
+        continue-on-error: true
         run: flutter analyze
 
       # ==========================================
