@@ -1,6 +1,5 @@
 // lib/data/models/live/live_model.dart
 
-/// Représente une session de live en cours.
 class LiveSession {
   final String id;
   final String channelName;
@@ -30,7 +29,6 @@ class LiveSession {
   }
 }
 
-/// Un commentaire de chat en direct.
 class LiveComment {
   final String userId;
   final String userName;
@@ -59,7 +57,6 @@ class LiveComment {
       };
 }
 
-/// Identifiants Agora renvoyés par la fonction Supabase `agora-token`.
 class AgoraCredentials {
   final String appId;
   final String token;
@@ -76,5 +73,57 @@ class AgoraCredentials {
   }
 }
 
-/// Différents états possibles de l'écran de live.
 enum LiveScreenStatus { loading, ready, error, permissionDenied }
+
+/// État complet de l'écran de live, exposé par le Notifier Riverpod.
+class LiveState {
+  final LiveScreenStatus status;
+  final String? errorMessage;
+  final bool isMuted;
+  final bool isVideoOff;
+  final bool isEnding;
+  final bool isFrontCamera;
+  final bool isBeautyEnabled;
+  final int viewerCount;
+  final List<int> coHostUids;
+  final List<LiveComment> comments;
+
+  const LiveState({
+    this.status = LiveScreenStatus.loading,
+    this.errorMessage,
+    this.isMuted = false,
+    this.isVideoOff = false,
+    this.isEnding = false,
+    this.isFrontCamera = true,
+    this.isBeautyEnabled = false,
+    this.viewerCount = 0,
+    this.coHostUids = const [],
+    this.comments = const [],
+  });
+
+  LiveState copyWith({
+    LiveScreenStatus? status,
+    String? errorMessage,
+    bool? isMuted,
+    bool? isVideoOff,
+    bool? isEnding,
+    bool? isFrontCamera,
+    bool? isBeautyEnabled,
+    int? viewerCount,
+    List<int>? coHostUids,
+    List<LiveComment>? comments,
+  }) {
+    return LiveState(
+      status: status ?? this.status,
+      errorMessage: errorMessage,
+      isMuted: isMuted ?? this.isMuted,
+      isVideoOff: isVideoOff ?? this.isVideoOff,
+      isEnding: isEnding ?? this.isEnding,
+      isFrontCamera: isFrontCamera ?? this.isFrontCamera,
+      isBeautyEnabled: isBeautyEnabled ?? this.isBeautyEnabled,
+      viewerCount: viewerCount ?? this.viewerCount,
+      coHostUids: coHostUids ?? this.coHostUids,
+      comments: comments ?? this.comments,
+    );
+  }
+}
