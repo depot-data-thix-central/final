@@ -1,40 +1,43 @@
 // lib/presentation/network/live/live_controller.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // 🌟 Import standard Riverpod
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/data/models/live/live_model.dart';
 import 'package:thix_id/data/services/live/live_service.dart';
 
-part 'live_controller.g.dart';
+// 🌟 REMPLACEMENT : Plus besoin de génération de code
+final liveControllerProvider = StateNotifierProvider.autoDispose.family<LiveController, LiveState, LiveSession>(
+  (ref, session) {
+    return LiveController(session, ref);
+  },
+);
 
-/// Notifier Riverpod pour un live donné, identifié par sa [LiveSession].
-/// Family car chaque live a son propre état (potentiellement plusieurs
-/// écrans instanciés dans une session de navigation).
-@riverpod
-class LiveController extends _$LiveController {
+class LiveController extends StateNotifier<LiveState> {
+  final LiveSession session;
+  final AutoDisposeStateNotifierProviderRef ref;
+
   RtcEngine? _engine;
   RealtimeChannel? _realtimeChannel;
   final StreamController<void> _heartController = StreamController<void>.broadcast();
   void Function(String userId, String userName)? onCoHostRequest;
 
-  RtcEngine? get engine => _engine;
-  Stream<void> get heartStream => _heartController.stream;
-
-  @override
-  LiveState build(LiveSession session) {
+  // Initialisation via le constructeur
+  LiveController(this.session, this.ref) : super(const LiveState()) {
     ref.onDispose(() {
       _realtimeChannel?.unsubscribe();
       _engine?.leaveChannel();
       _engine?.release();
       _heartController.close();
     });
-    // Démarrage automatique dès la création du provider.
-    Future.microtask(bootstrap);
-    return const LiveState();
+    // Démarrage automatique
+    Future.microtask(() => bootstrap());
   }
+
+  RtcEngine? get engine => _engine;
+  Stream<void> get heartStream => _heartController.stream;
 
   LiveService get _service => ref.read(liveServiceProvider);
 
