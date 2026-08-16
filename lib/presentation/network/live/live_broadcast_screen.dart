@@ -2,7 +2,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -18,7 +18,7 @@ class _C {
   static const textMuted = Colors.white70;
 }
 
-class LiveBroadcastScreen extends StatelessWidget {
+class LiveBroadcastScreen extends ConsumerStatefulWidget {
   final LiveSession session;
   final bool isVideoEnabled;
   final bool isMicEnabled;
@@ -31,45 +31,33 @@ class LiveBroadcastScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider<LiveController>(
-      create: (_) => LiveController(
-        session: session,
-        initialVideoEnabled: isVideoEnabled,
-        initialMicEnabled: isMicEnabled,
-      )..bootstrap(),
-      child: const _LiveBroadcastView(),
-    );
-  }
+  ConsumerState<LiveBroadcastScreen> createState() => _LiveBroadcastScreenState();
 }
 
-class _LiveBroadcastView extends StatefulWidget {
-  const _LiveBroadcastView();
-
-  @override
-  State<_LiveBroadcastView> createState() => _LiveBroadcastViewState();
-}
-
-class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
+class _LiveBroadcastScreenState extends ConsumerState<LiveBroadcastScreen> {
   final TextEditingController _chatController = TextEditingController();
   final List<Widget> _floatingHearts = [];
   final Random _random = Random();
-  LiveController? _controller;
+  bool _listenersAttached = false;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final controller = context.read<LiveController>();
-    if (_controller != controller) {
-      _controller = controller;
-      controller.onCoHostRequest = _handleCoHostRequest;
-      controller.heartStream.listen((_) => _spawnHeart());
-    }
+  void _attachListenersOnce() {
+    if (_listenersAttached) return;
+    _listenersAttached = true;
+
+    final notifier = ref.read(liveControllerProvider(widget.session).notifier);
+    notifier.onCoHostRequest = _handleCoHostRequest;
+    notifier.heartStream.listen((_) => _spawnHeart());
+
+    // Applique les préférences initiales caméra/micro passées au widget.
+    notifier.bootstrap(
+      initialVideoEnabled: widget.isVideoEnabled,
+      initialMicEnabled: widget.isMicEnabled,
+    );
   }
 
   void _handleCoHostRequest(String requestUserId, String requestUserName) {
     if (!mounted) return;
-    final controller = context.read<LiveController>();
+    final notifier = ref.read(liveControllerProvider(widget.session).notifier);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -79,7 +67,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
         actions: [
           TextButton(
             onPressed: () {
-              controller.respondToCoHost(requestUserId, false);
+              notifier.respondToCoHost(requestUserId, false);
               Navigator.pop(ctx);
             },
             child: const Text('Refuser', style: TextStyle(color: _C.red)),
@@ -87,7 +75,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _C.primary),
             onPressed: () {
-              controller.respondToCoHost(requestUserId, true);
+              notifier.respondToCoHost(requestUserId, true);
               Navigator.pop(ctx);
             },
             child: const Text('Accepter', style: TextStyle(color: _C.textMain)),
@@ -112,9 +100,9 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
     });
   }
 
-  void _sendComment(LiveController controller) {
+  void _sendComment() {
     if (_chatController.text.trim().isEmpty) return;
-    controller.sendComment(_chatController.text);
+    ref.read(liveControllerProvider(widget.session).notifier).sendComment(_chatController.text);
     _chatController.clear();
     FocusScope.of(context).unfocus();
   }
@@ -127,13 +115,17 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<LiveController>();
+    // build() est appelé à chaque frame ; on n'attache les listeners qu'une fois.
+    _attachListenersOnce();
+
+    final state = ref.watch(liveControllerProvider(widget.session));
+    final notifier = ref.read(liveControllerProvider(widget.session).notifier);
 
     return PopScope(
       canPop: false,
       onPopInvoked: (didPop) async {
         if (didPop) return;
-        await controller.endBroadcast();
+        await notifier.endBroadcast();
         if (context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
@@ -141,17 +133,17 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
         resizeToAvoidBottomInset: true,
         body: Stack(
           children: [
-            Positioned.fill(child: _buildBackground(context, controller)),
+            Positioned.fill(child: _buildBackground(context, state, notifier)),
 
-            if (controller.status == LiveScreenStatus.ready) ...[
+            if (state.status == LiveScreenStatus.ready) ...[
               Positioned(top: 0, left: 0, right: 0, height: 140, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.6), Colors.transparent])))),
               Positioned(bottom: 0, left: 0, right: 0, height: 350, child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])))),
 
-              if (controller.coHostUids.isNotEmpty)
+              if (state.coHostUids.isNotEmpty)
                 Positioned(
                   top: 100, right: 16,
                   child: Column(
-                    children: controller.coHostUids.map((uid) => Container(
+                    children: state.coHostUids.map((uid) => Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       width: 100, height: 140,
                       decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: _C.primary, width: 2), color: Colors.black),
@@ -159,7 +151,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                         borderRadius: BorderRadius.circular(10),
                         child: AgoraVideoView(
                           controller: VideoViewController.remote(
-                            rtcEngine: controller.engine!, canvas: VideoCanvas(uid: uid), connection: RtcConnection(channelId: controller.channelName), useFlutterTexture: kIsWeb,
+                            rtcEngine: notifier.engine!, canvas: VideoCanvas(uid: uid), connection: RtcConnection(channelId: widget.session.channelName), useFlutterTexture: kIsWeb,
                           ),
                         ),
                       ),
@@ -167,7 +159,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                   ),
                 ),
 
-              _buildTopBar(context, controller),
+              _buildTopBar(context, state, notifier),
 
               Positioned(
                 right: 16, bottom: 160,
@@ -175,10 +167,10 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     _SideActionButton(
-                      icon: controller.isBeautyEnabled ? Icons.face_retouching_natural_rounded : Icons.face_rounded,
+                      icon: state.isBeautyEnabled ? Icons.face_retouching_natural_rounded : Icons.face_rounded,
                       label: 'Beauté',
-                      color: controller.isBeautyEnabled ? _C.primary : _C.textMain,
-                      onTap: controller.toggleBeauty,
+                      color: state.isBeautyEnabled ? _C.primary : _C.textMain,
+                      onTap: notifier.toggleBeauty,
                     ),
                   ],
                 ),
@@ -191,9 +183,9 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                   blendMode: BlendMode.dstIn,
                   child: ListView.builder(
                     reverse: true,
-                    itemCount: controller.comments.length,
+                    itemCount: state.comments.length,
                     itemBuilder: (context, index) {
-                      final comment = controller.comments[controller.comments.length - 1 - index];
+                      final comment = state.comments[state.comments.length - 1 - index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Container(
@@ -228,7 +220,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                             controller: _chatController,
                             style: const TextStyle(color: _C.textMain, fontSize: 14),
                             textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _sendComment(controller),
+                            onSubmitted: (_) => _sendComment(),
                             decoration: const InputDecoration(hintText: 'Ajouter un commentaire...', hintStyle: TextStyle(color: _C.textMuted), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
                           ),
                         ),
@@ -247,27 +239,27 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _BottomControlButton(
-                        icon: controller.isVideoOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
-                        label: controller.isVideoOff ? 'Cam off' : 'Caméra',
-                        color: controller.isVideoOff ? _C.red : _C.textMain,
-                        onTap: controller.toggleVideo,
+                        icon: state.isVideoOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+                        label: state.isVideoOff ? 'Cam off' : 'Caméra',
+                        color: state.isVideoOff ? _C.red : _C.textMain,
+                        onTap: notifier.toggleVideo,
                       ),
                       _BottomControlButton(
-                        icon: controller.isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                        label: controller.isMuted ? 'Muet' : 'Micro',
-                        color: controller.isMuted ? _C.red : _C.textMain,
-                        onTap: controller.toggleMute,
+                        icon: state.isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                        label: state.isMuted ? 'Muet' : 'Micro',
+                        color: state.isMuted ? _C.red : _C.textMain,
+                        onTap: notifier.toggleMute,
                       ),
                       _BottomControlButton(
                         icon: Icons.flip_camera_ios_rounded,
                         label: 'Tourner',
-                        onTap: controller.switchCamera,
+                        onTap: notifier.switchCamera,
                       ),
                       _BottomControlButton(
                         icon: Icons.favorite_rounded,
                         label: "J'aime",
                         color: _C.primary,
-                        onTap: controller.triggerHeart,
+                        onTap: notifier.triggerHeart,
                       ),
                     ],
                   ),
@@ -276,17 +268,17 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
 
               ..._floatingHearts,
             ] else
-              _buildMinimalTopBar(context),
+              _buildMinimalTopBar(context, notifier),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBackground(BuildContext context, LiveController controller) {
-    switch (controller.status) {
+  Widget _buildBackground(BuildContext context, LiveState state, LiveController notifier) {
+    switch (state.status) {
       case LiveScreenStatus.ready:
-        if (controller.isVideoOff || controller.engine == null) {
+        if (state.isVideoOff || notifier.engine == null) {
           return Container(color: _C.bgDark);
         }
         return SizedBox.expand(
@@ -297,7 +289,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
               height: MediaQuery.of(context).size.height,
               child: AgoraVideoView(
                 controller: VideoViewController(
-                  rtcEngine: controller.engine!, canvas: const VideoCanvas(uid: 0), useFlutterTexture: kIsWeb,
+                  rtcEngine: notifier.engine!, canvas: const VideoCanvas(uid: 0), useFlutterTexture: kIsWeb,
                 ),
               ),
             ),
@@ -342,7 +334,10 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                     child: const Text('Ouvrir les réglages'),
                   ),
                   TextButton(
-                    onPressed: controller.bootstrap,
+                    onPressed: () => notifier.bootstrap(
+                      initialVideoEnabled: widget.isVideoEnabled,
+                      initialMicEnabled: widget.isMicEnabled,
+                    ),
                     child: const Text('Réessayer', style: TextStyle(color: _C.textMuted)),
                   ),
                 ],
@@ -363,14 +358,17 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                   const Icon(Icons.error_outline_rounded, color: _C.red, size: 40),
                   const SizedBox(height: 16),
                   Text(
-                    "Erreur d'initialisation :\n${controller.errorMessage ?? 'Inconnue'}",
+                    "Erreur d'initialisation :\n${state.errorMessage ?? 'Inconnue'}",
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: _C.red, fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: _C.primary),
-                    onPressed: controller.bootstrap,
+                    onPressed: () => notifier.bootstrap(
+                      initialVideoEnabled: widget.isVideoEnabled,
+                      initialMicEnabled: widget.isMicEnabled,
+                    ),
                     child: const Text('Réessayer'),
                   ),
                 ],
@@ -381,7 +379,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
     }
   }
 
-  Widget _buildMinimalTopBar(BuildContext context) {
+  Widget _buildMinimalTopBar(BuildContext context, LiveController notifier) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -402,7 +400,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
     );
   }
 
-  Widget _buildTopBar(BuildContext context, LiveController controller) {
+  Widget _buildTopBar(BuildContext context, LiveState state, LiveController notifier) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -417,10 +415,10 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                   CircleAvatar(
                     radius: 16,
                     backgroundColor: _C.primary,
-                    backgroundImage: controller.session.hostAvatarUrl != null && controller.session.hostAvatarUrl!.isNotEmpty
-                        ? CachedNetworkImageProvider(controller.session.hostAvatarUrl!)
+                    backgroundImage: widget.session.hostAvatarUrl != null && widget.session.hostAvatarUrl!.isNotEmpty
+                        ? CachedNetworkImageProvider(widget.session.hostAvatarUrl!)
                         : null,
-                    child: controller.session.hostAvatarUrl == null || controller.session.hostAvatarUrl!.isEmpty
+                    child: widget.session.hostAvatarUrl == null || widget.session.hostAvatarUrl!.isEmpty
                         ? const Icon(Icons.person, size: 20, color: _C.textMain)
                         : null,
                   ),
@@ -429,7 +427,7 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(controller.session.hostName, style: const TextStyle(color: _C.textMain, fontSize: 13, fontWeight: FontWeight.bold)),
+                      Text(widget.session.hostName, style: const TextStyle(color: _C.textMain, fontSize: 13, fontWeight: FontWeight.bold)),
                       Row(
                         children: [
                           Container(width: 6, height: 6, decoration: const BoxDecoration(color: _C.red, shape: BoxShape.circle)),
@@ -447,18 +445,18 @@ class _LiveBroadcastViewState extends State<_LiveBroadcastView> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(ThixPolicy.rFull)),
-              child: Row(children: [const Icon(Icons.visibility_rounded, color: _C.textMain, size: 14), const SizedBox(width: 4), Text('${controller.viewerCount}', style: const TextStyle(color: _C.textMain, fontSize: 13, fontWeight: FontWeight.bold))]),
+              child: Row(children: [const Icon(Icons.visibility_rounded, color: _C.textMain, size: 14), const SizedBox(width: 4), Text('${state.viewerCount}', style: const TextStyle(color: _C.textMain, fontSize: 13, fontWeight: FontWeight.bold))]),
             ),
             const SizedBox(width: 12),
             GestureDetector(
               onTap: () async {
-                await controller.endBroadcast();
+                await notifier.endBroadcast();
                 if (context.mounted) Navigator.of(context).pop();
               },
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                child: controller.isEnding ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: _C.textMain, strokeWidth: 2)) : const Icon(Icons.close_rounded, color: _C.textMain, size: 20),
+                child: state.isEnding ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: _C.textMain, strokeWidth: 2)) : const Icon(Icons.close_rounded, color: _C.textMain, size: 20),
               ),
             ),
           ],
