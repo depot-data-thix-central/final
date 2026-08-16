@@ -1,16 +1,16 @@
 // lib/data/services/live/live_service.dart
 import 'dart:async';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/data/models/live/live_model.dart';
 
-/// Centralise tous les accès Supabase (token Agora, fin de session, realtime)
-/// pour le module Live. Ne contient aucune logique UI.
+part 'live_service.g.dart';
+
 class LiveService {
   final SupabaseClient _client = Supabase.instance.client;
 
   String get currentUserId => _client.auth.currentUser?.id ?? 'host';
 
-  /// Récupère le couple appId/token Agora via l'Edge Function `agora-token`.
   Future<AgoraCredentials> fetchAgoraCredentials(String channelName) async {
     final response = await _client.functions
         .invoke('agora-token', body: {'channel': channelName, 'uid': 0})
@@ -22,21 +22,16 @@ class LiveService {
     return AgoraCredentials.fromMap(response.data as Map<String, dynamic>);
   }
 
-  /// Supprime la session de live côté base de données (fin du direct).
   Future<void> endLiveSession(String liveId) async {
     await _client.from('live_sessions').delete().eq('id', liveId);
   }
 
-  /// Ouvre le canal Supabase Realtime pour un live donné.
-  /// Les callbacks sont fournis par le controller, ce service ne fait
-  /// que le branchement.
   RealtimeChannel openRealtimeChannel({
     required String liveId,
     required void Function(LiveComment comment) onChat,
     required void Function() onHeart,
     required void Function(String userId, String userName) onCoHostRequest,
     required void Function(int viewerCount) onPresenceSync,
-    void Function(RealtimeSubscribeStatus status)? onSubscribed,
   }) {
     final channel = _client.channel('live_$liveId');
 
@@ -62,7 +57,6 @@ class LiveService {
           if (status == RealtimeSubscribeStatus.subscribed) {
             channel.track({'user_id': currentUserId, 'is_host': true});
           }
-          onSubscribed?.call(status);
         });
 
     return channel;
@@ -79,3 +73,6 @@ class LiveService {
     );
   }
 }
+
+@riverpod
+LiveService liveService(LiveServiceRef ref) => LiveService();
