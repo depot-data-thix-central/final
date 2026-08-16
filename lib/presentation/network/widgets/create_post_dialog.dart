@@ -14,6 +14,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:audioplayers/audioplayers.dart'; 
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:permission_handler/permission_handler.dart'; // NOUVEAU: Indispensable pour vérifier les accès
 
 import 'package:thix_id/models/network_post.dart';
 import 'package:thix_id/features/network/data/network_service_provider.dart';
@@ -106,18 +107,8 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
   int _previousTextLength = 0;
 
   // ─── LOGIQUE DE COMPTE (SÉCURITÉ & LIMITES) ───
-  // 5 niveaux : gratuit · standard · premium · entreprise · officiel
-  //
-  // gratuit     : texte 280 car. · 1 photo · pas de vidéo · pas de formatage
-  //               · audio 30s max, 3 publications vocales/jour · fact-check obligatoire
-  // standard    : texte illimité · 4 photos · vidéo · formatage/fond couleur
-  //               · audio 60s max, illimité/jour · fact-check obligatoire
-  // premium     : full (standard) + sondage + challenge (4 options max)
-  //               · audio 120s max, illimité/jour · fact-check obligatoire
-  // entreprise  : full (premium) + sondage 8 options · fact-check bypass
-  // officiel    : full (premium) + sondage 8 options · fact-check bypass
   bool _isLoadingLimits = true;
-  String _userTier = 'gratuit'; // 'gratuit', 'standard', 'premium', 'entreprise', 'officiel'
+  String _userTier = 'gratuit'; 
   int _audioPostsToday = 0;
 
   bool get _isFree => _userTier == 'gratuit' || _userTier == 'none';
@@ -126,18 +117,17 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
   bool get _isEnterprise => _userTier == 'entreprise' || _userTier == 'enterprise';
   bool get _isOfficial => _userTier == 'officiel' || _userTier == 'official';
 
-  // --- LES LIMITES ---
   bool get _canFormatText => !_isFree;
   bool get _canPostVideo => !_isFree;
   bool get _canCreatePoll => _isPremium || _isEnterprise || _isOfficial;
   bool get _canCreateChallenge => _isPremium || _isEnterprise || _isOfficial;
   bool get _skipAICheck => _isEnterprise || _isOfficial;
-  bool get _hasWidePollOptions => _isEnterprise || _isOfficial; // 8 options au lieu de 4
+  bool get _hasWidePollOptions => _isEnterprise || _isOfficial; 
 
   int get _maxTextLength => _isFree ? 280 : 5000;
   int get _maxPhotos => _isFree ? 1 : (_isStandard ? 4 : 10);
   int get _maxAudioDuration => _isFree ? 30 : (_isStandard ? 60 : 120);
-  bool get _hasAudioDailyQuota => _isFree; // seul le gratuit est limité à 3/jour
+  bool get _hasAudioDailyQuota => _isFree; 
   static const int _freeAudioDailyLimit = 3;
 
   @override
@@ -155,7 +145,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid == null) return;
 
-      // 1. Récupérer le niveau de compte
       final profile = await Supabase.instance.client
           .from('profiles')
           .select('certification_tier')
@@ -164,7 +153,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       
       final tier = (profile?['certification_tier']?.toString().toLowerCase()) ?? 'gratuit';
       
-      // 2. Compter les audios publiés aujourd'hui (depuis minuit)
       final startOfDay = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day).toIso8601String();
       final audioCountRes = await Supabase.instance.client
           .from('posts')
@@ -211,7 +199,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
     final text = _contentController.text;
     final currentLength = text.length;
 
-    // Limite stricte pour compte gratuit
     if (_isFree && currentLength > 280) {
       _contentController.text = text.substring(0, 280);
       _contentController.selection = TextSelection.collapsed(offset: 280);
@@ -259,7 +246,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
     setState(() => _showMentions = false);
   }
 
-  // ─── GESTION DES POPUPS D'UPGRADE ───
   void _showUpgradeDialog(String featureName, String requiredTier) {
     HapticFeedback.heavyImpact();
     showDialog(
@@ -283,7 +269,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
             style: ElevatedButton.styleFrom(backgroundColor: _C.gold, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             onPressed: () {
               Navigator.pop(ctx);
-              // TODO: Rediriger vers la page d'abonnement
             },
             child: const Text('Voir les offres', style: TextStyle(color: _C.textDark, fontWeight: FontWeight.bold)),
           ),
@@ -313,6 +298,60 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
         ],
       ),
     );
+  }
+
+  // ─── GESTION DES PERMISSIONS PLAY STORE (PROMINENT DISCLOSURE) ───
+  Future<bool> _checkPermissionWithDisclosure(Permission permission, String explanation) async {
+    if (kIsWeb) return true;
+    var status = await permission.status;
+    if (status.isGranted) return true;
+
+    if (!mounted) return false;
+
+    // Affiche le design Blanc/Noir validé
+    bool? userAgreed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.privacy_tip_outlined, color: Colors.black, size: 28),
+            SizedBox(width: 10),
+            Text("Autorisation", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          explanation,
+          style: const TextStyle(color: Colors.black87, fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Annuler", style: TextStyle(color: Colors.black54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              elevation: 0,
+              side: const BorderSide(color: Colors.black, width: 1),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Compris", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (userAgreed != true) return false;
+
+    // Vraie demande système
+    var newStatus = await permission.request();
+    return newStatus.isGranted;
   }
 
   void _wrapSelection(String prefix, String suffix) {
@@ -348,13 +387,17 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       return;
     }
 
-    try {
-      final hasPermission = await _audioRecorder.hasPermission();
-      if (!hasPermission) {
-        if (mounted) setState(() => _errorMessage = 'Permission microphone refusée.');
-        return;
-      }
+    // 🚨 VÉRIFICATION SÉCURITÉ PLAY STORE
+    final hasPerm = await _checkPermissionWithDisclosure(
+      Permission.microphone,
+      "Pour enregistrer un message vocal, THIX ID a besoin d'accéder à votre microphone."
+    );
+    if (!hasPerm) {
+      if (mounted) setState(() => _errorMessage = 'Permission microphone refusée.');
+      return;
+    }
 
+    try {
       String recordPath = kIsWeb ? 'post_audio_${DateTime.now().millisecondsSinceEpoch}.m4a' : p.join((await getTemporaryDirectory()).path, 'post_audio_${DateTime.now().millisecondsSinceEpoch}.m4a');
       await _audioRecorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000), path: recordPath);
 
@@ -364,7 +407,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!mounted) return;
         setState(() => _recordDuration++);
-        // Limite dynamique selon le palier
         if (_recordDuration >= _maxAudioDuration) {
           _stopRecording();
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Durée maximale atteinte ($_maxAudioDuration s)')));
@@ -400,7 +442,7 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       setState(() {
         _resetBgColorIfMediaAdded();
         for (final f in result.files) {
-          if (_images.length >= _maxPhotos) break; // Sécurité blocage
+          if (_images.length >= _maxPhotos) break; 
           if (f.bytes != null) _images.add(_MediaItem(f.bytes!, f.name));
         }
       });
@@ -426,11 +468,30 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
       _showUpgradeDialog('Ajouter plus de photos', _isFree ? 'Standard' : 'Premium');
       return;
     }
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false, withData: true);
-    if (result != null && result.files.isNotEmpty && mounted) {
-      if (result.files.first.bytes != null) {
-        setState(() { _resetBgColorIfMediaAdded(); _images.add(_MediaItem(result.files.first.bytes!, result.files.first.name)); });
+
+    // 🚨 VÉRIFICATION SÉCURITÉ PLAY STORE AVANT OUVERTURE CAMÉRA
+    final hasPerm = await _checkPermissionWithDisclosure(
+      Permission.camera,
+      "Pour prendre une photo depuis l'application, THIX ID a besoin d'accéder à votre caméra."
+    );
+    if (!hasPerm) return;
+
+    // Utilisation corrigée: ImagePicker ouvre la vraie caméra (contrairement à FilePicker)
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(source: ImageSource.camera);
+      
+      if (photo != null) {
+        final bytes = await photo.readAsBytes();
+        if (mounted) {
+          setState(() { 
+            _resetBgColorIfMediaAdded(); 
+            _images.add(_MediaItem(bytes, photo.name)); 
+          });
+        }
       }
+    } catch (e) {
+      debugPrint("Camera error: $e");
     }
   }
 
@@ -439,7 +500,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
   }
 
   Future<Map<String, String?>> _runFactCheck(String textContent) async {
-    // 🛡️ SÉCURITÉ : Bypass total pour Entreprise et Officiel
     if (_skipAICheck || textContent.isEmpty) {
       return {'isMisinformation': 'false', 'message': null, 'severity': null};
     }
@@ -465,10 +525,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
 
     return {'isMisinformation': 'false', 'message': null, 'severity': null};
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // PUBLISH — insert + post en tête du feed
-  // ─────────────────────────────────────────────────────────────
 
   Future<void> _publishPost() async {
     final textContent = _contentController.text.trim();
@@ -739,7 +795,7 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
                             TextField(
                               controller: _contentController,
                               focusNode: _contentFocusNode,
-                              maxLength: _isFree ? 280 : null, // LIMITE GRATUIT
+                              maxLength: _isFree ? 280 : null,
                               minLines: _postTypeMode == 2 ? 2 : (_canHaveBgColor && _hasBgColor ? null : 5),
                               maxLines: _canHaveBgColor && _hasBgColor ? null : 10,
                               textAlign: _canHaveBgColor && _hasBgColor ? TextAlign.center : TextAlign.start,
@@ -752,10 +808,9 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
                               decoration: InputDecoration(
                                 hintText: _postTypeMode == 1 ? 'Posez votre question...' : _postTypeMode == 2 ? 'Titre du challenge...' : 'Exprimez-vous...',
                                 hintStyle: TextStyle(color: _canHaveBgColor && _hasBgColor ? Colors.white70 : _C.textSecondary),
-                                border: InputBorder.none, isCollapsed: true, counterText: "", // On masque le counter par défaut pour mettre le notre
+                                border: InputBorder.none, isCollapsed: true, counterText: "",
                               ),
                             ),
-                            // INDICATEUR DE TEXTE POUR COMPTE GRATUIT
                             if (_isFree && _postTypeMode == 0)
                               Align(
                                 alignment: Alignment.bottomRight,
@@ -850,7 +905,6 @@ class _CreatePostDialogState extends ConsumerState<CreatePostDialog> with Single
                             ),
                           );
                         }),
-                        // Entreprise + Officiel : 8 options max · Premium : 4 options max
                         if (_pollOptionControllers.length < (_hasWidePollOptions ? 8 : 4))
                           TextButton.icon(
                             onPressed: () => setState(() => _pollOptionControllers.add(TextEditingController())),
