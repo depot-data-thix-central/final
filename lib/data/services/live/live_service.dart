@@ -1,10 +1,13 @@
 // lib/data/services/live/live_service.dart
 import 'dart:async';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // 🌟 Import standard
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/data/models/live/live_model.dart';
 
-part 'live_service.g.dart';
+// 🌟 REMPLACEMENT : Déclaration manuelle du Provider au lieu de @riverpod
+final liveServiceProvider = Provider<LiveService>((ref) {
+  return LiveService();
+});
 
 class LiveService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -73,6 +76,3 @@ class LiveService {
     );
   }
 }
-
-@riverpod
-LiveService liveService(LiveServiceRef ref) => LiveService();
