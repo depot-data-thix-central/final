@@ -1,7 +1,8 @@
+// lib/services/notification_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/supabase/supabase_config.dart';
-import 'package:thix_id/services/local_notification_service.dart'; // ← Ajout
+import 'package:thix_id/services/local_notification_service.dart';
 import 'dart:async';
 
 class NotificationService {
@@ -98,9 +99,9 @@ class NotificationService {
                 .toList(growable: false)
             : const <Map<String, dynamic>>[];
 
-        debugPrint('NotificationService: emitLatest ok uid=\( uid count= \){list.length}');
+        debugPrint('NotificationService: emitLatest ok uid=$uid count=${list.length}');
 
-        // ← NOUVEAU : Affiche une pop pour la notification la plus récente non lue
+        // Affiche une pop pour la notification la plus récente non lue
         if (list.isNotEmpty) {
           unawaited(_maybeShowPop(list.first));
         }
@@ -144,7 +145,7 @@ class NotificationService {
               table: _table,
               filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid),
               callback: (payload) {
-                debugPrint('NotificationService: realtime change uid=\( uid table= \){payload.table}');
+                debugPrint('NotificationService: realtime change uid=$uid table=${payload.table}');
                 unawaited(emitLatest());
               },
             )
@@ -167,7 +168,7 @@ class NotificationService {
               final delayMs = (500 * (1 << (closedRetries - 1))).clamp(500, 8000);
               retryTimer?.cancel();
               retryTimer = Timer(Duration(milliseconds: delayMs), () {
-                debugPrint('NotificationService: retry subscribe (attempt=\( closedRetries, delay= \){delayMs}ms) uid=$uid');
+                debugPrint('NotificationService: retry subscribe (attempt=$closedRetries, delay=${delayMs}ms) uid=$uid');
                 unawaited(subscribeOrRetry());
               });
             });
@@ -226,7 +227,7 @@ class NotificationService {
         });
       }
 
-      // ← NOUVEAU : Pop immédiate
+      // Pop immédiate
       await LocalNotificationService.instance.show(
         id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
         title: title,
