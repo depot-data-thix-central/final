@@ -1,48 +1,152 @@
-name: Build Flutter APK
+name: Build THIX ID Production
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches:
+      - "main"
 
 jobs:
-  build-apk:
+  build-android:
     runs-on: ubuntu-latest
 
     steps:
+      # ==========================================
+      # CHECKOUT
+      # ==========================================
+
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ==========================================
+      # JAVA
+      # ==========================================
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
+
+      # ==========================================
+      # FLUTTER
+      # ==========================================
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.47.0"
           channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      # ==========================================
+      # DEPENDENCIES
+      # ==========================================
 
       - name: Flutter pub get
         run: flutter pub get
 
-      # ✅ CORRECTION ICI : Retrait de --no-enable-impeller
+      # ==========================================
+      # ANALYSIS
+      # ==========================================
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      # ==========================================
+      # ANDROID SIGNING
+      # ==========================================
+
+      - name: Create key.properties
+        run: |
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=release-keystore.jks" >> android/key.properties
+
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/release-keystore.jks
+
+      - name: Verify signing files
+        run: |
+          test -f android/key.properties
+          test -f android/release-keystore.jks
+
+      # ==========================================
+      # BUILD APP BUNDLE - GOOGLE PLAY
+      # ==========================================
+
       - name: Build release App Bundle
-        run: flutter build appbundle --release
+        run: |
+          flutter build appbundle \
+            --release \
+            --obfuscate \
+            --split-debug-info=build/app/outputs/symbols
 
-      # ✅ CORRECTION ICI : Retrait de --no-enable-impeller
-      - name: Build release APKs (split by ABI)
-        run: flutter build apk --release --split-per-abi
+      # ==========================================
+      # BUILD APK - DIRECT INSTALLATION
+      # ==========================================
 
-      - name: Upload App Bundle artifact
+      - name: Build release APKs
+        run: |
+          flutter build apk \
+            --release \
+            --split-per-abi \
+            --obfuscate \
+            --split-debug-info=build/app/outputs/symbols
+
+      # ==========================================
+      # UPLOAD AAB
+      # ==========================================
+
+      - name: Upload App Bundle
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-aab
+          name: thix-id-release-aab
           path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Upload split APKs artifact
+      # ==========================================
+      # UPLOAD APK
+      # ==========================================
+
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apks-split
+          name: thix-id-release-apks
           path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # ==========================================
+      # UPLOAD DEBUG SYMBOLS
+      # ==========================================
+
+      - name: Upload Debug Symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: thix-id-debug-symbols
+          path: build/app/outputs/symbols
+          if-no-files-found: error
+          retention-days: 90
+
+      # ==========================================
+      # CLEANUP
+      # ==========================================
+
+      - name: Cleanup signing files
+        if: always()
+        run: |
+          rm -f android/release-keystore.jks
+          rm -f android/key.properties
