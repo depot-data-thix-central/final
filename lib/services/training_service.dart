@@ -1,12 +1,15 @@
+// lib/services/training_service.dart
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:thix_id/models/training_certificate.dart';
-import 'package:thix_id/models/training_enrollment.dart';
-import 'package:thix_id/models/training_item.dart';
-import 'package:thix_id/models/training_lesson.dart';
 import 'package:thix_id/supabase/supabase_config.dart';
+
+// 🌟 CORRECTION DES IMPORTS : Pointage vers le bon dossier de données
+import 'package:thix_id/data/models/training/training_certificate.dart';
+import 'package:thix_id/data/models/training/training_enrollment.dart';
+import 'package:thix_id/data/models/training/training_item.dart';
+import 'package:thix_id/data/models/training/training_lesson.dart';
 
 /// User-side training service.
 ///
@@ -28,14 +31,15 @@ class TrainingService {
     try {
       final res = await _client
           .from(trainingsTable)
-          .select('*')
+          .select()
           .eq('is_published', true)
           .order('is_featured', ascending: false)
           .order('updated_at', ascending: false)
           .limit(limit);
-      if (res is! List) return const [];
+          
+      // Supabase retourne directement une List<Map<String, dynamic>>
       return res
-          .map((e) => TrainingItem.fromJson((e as Map).cast<String, dynamic>()))
+          .map((e) => TrainingItem.fromJson(e))
           .where((t) => t.id.trim().isNotEmpty)
           .toList(growable: false);
     } catch (e) {
@@ -50,12 +54,13 @@ class TrainingService {
     try {
       final row = await _client
           .from(trainingsTable)
-          .select('*')
+          .select()
           .eq('id', id)
           .eq('is_published', true)
           .maybeSingle();
+          
       if (row == null) return null;
-      return TrainingItem.fromJson((row as Map).cast<String, dynamic>());
+      return TrainingItem.fromJson(row);
     } catch (e) {
       debugPrint('TrainingService.fetchTraining failed id=$id err=$e');
       final all = await listPublishedTrainings();
@@ -73,13 +78,13 @@ class TrainingService {
     try {
       final res = await _client
           .from(lessonsTable)
-          .select('*')
+          .select()
           .eq('training_id', id)
           .order('lesson_order', ascending: true)
           .limit(500);
-      if (res is! List) return const [];
+          
       return res
-          .map((e) => TrainingLesson.fromJson((e as Map).cast<String, dynamic>()))
+          .map((e) => TrainingLesson.fromJson(e))
           .where((l) => l.id.trim().isNotEmpty)
           .toList(growable: false);
     } catch (e) {
@@ -95,12 +100,13 @@ class TrainingService {
     try {
       final row = await _client
           .from(enrollmentsTable)
-          .select('*')
+          .select()
           .eq('user_id', uid)
           .eq('training_id', tid)
           .maybeSingle();
+          
       if (row == null) return null;
-      return TrainingEnrollment.fromJson((row as Map).cast<String, dynamic>());
+      return TrainingEnrollment.fromJson(row);
     } catch (e) {
       debugPrint('TrainingService.getMyEnrollment failed err=$e');
       return null;
@@ -113,11 +119,12 @@ class TrainingService {
     try {
       final row = await _client
           .from(enrollmentsTable)
-          .select('*')
+          .select()
           .eq('id', id)
           .maybeSingle();
+          
       if (row == null) return null;
-      return TrainingEnrollment.fromJson((row as Map).cast<String, dynamic>());
+      return TrainingEnrollment.fromJson(row);
     } catch (e) {
       debugPrint('TrainingService.fetchEnrollmentById failed err=$e');
       return null;
@@ -141,10 +148,11 @@ class TrainingService {
             'last_activity_at': now.toIso8601String(),
             'updated_at': now.toIso8601String(),
           })
-          .select('*')
+          .select()
           .maybeSingle();
+          
       if (res == null) throw Exception('Enroll returned null');
-      return TrainingEnrollment.fromJson((res as Map).cast<String, dynamic>());
+      return TrainingEnrollment.fromJson(res);
     } catch (e) {
       debugPrint('TrainingService.enroll failed err=$e');
       rethrow;
@@ -188,17 +196,12 @@ class TrainingService {
       try {
         final res = await _client
             .from(enrollmentsTable)
-            .select('*')
+            .select()
             .eq('user_id', uid)
             .order('updated_at', ascending: false)
             .limit(200);
-        if (res is List) {
-          yield res
-              .map((e) => TrainingEnrollment.fromJson((e as Map).cast<String, dynamic>()))
-              .toList(growable: false);
-        } else {
-          yield const [];
-        }
+            
+        yield res.map((e) => TrainingEnrollment.fromJson(e)).toList(growable: false);
       } catch (e) {
         debugPrint('TrainingService.streamMyEnrollments poll failed err=$e');
         yield const [];
@@ -217,17 +220,12 @@ class TrainingService {
       try {
         final res = await _client
             .from(certificatesTable)
-            .select('*')
+            .select()
             .eq('user_id', uid)
             .order('issued_at', ascending: false)
             .limit(200);
-        if (res is List) {
-          yield res
-              .map((e) => TrainingCertificate.fromJson((e as Map).cast<String, dynamic>()))
-              .toList(growable: false);
-        } else {
-          yield const [];
-        }
+            
+        yield res.map((e) => TrainingCertificate.fromJson(e)).toList(growable: false);
       } catch (e) {
         debugPrint('TrainingService.streamMyCertificates poll failed err=$e');
         yield const [];
