@@ -1,5 +1,6 @@
+// lib/services/user_service.dart
 import 'dart:math';
-import 'package:flutter/foundation.dart'; // <-- AJOUT pour debugPrint
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_user.dart';
 
@@ -276,7 +277,8 @@ class UserService {
         .eq('thix_id', thixId)
         .maybeSingle();
     if (row == null) return null;
-    return _mapToAppUser(row as Map<String, dynamic>);
+    // `.maybeSingle()` retourne déjà Map<String, dynamic>?, cast inutile.
+    return _mapToAppUser(row);
   }
 
   Future<AppUser?> getUserById(String userId) async {
@@ -286,7 +288,7 @@ class UserService {
         .eq('id', userId)
         .maybeSingle();
     if (row == null) return null;
-    return _mapToAppUser(row as Map<String, dynamic>);
+    return _mapToAppUser(row);
   }
 
   // ==================== MÉTHODE DE MAPPING ====================
