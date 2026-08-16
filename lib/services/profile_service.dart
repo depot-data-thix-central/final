@@ -1,3 +1,4 @@
+// lib/services/profile_service.dart
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -67,10 +68,10 @@ class ProfileService {
           .order('updated_at', ascending: false)
           .range(start, end);
 
-      if (res is! List) return const [];
-      
-      final rows = res.map((e) => e as Map<String, dynamic>).toList();
-      
+      // `res` est déjà un List<Map<String, dynamic>> (PostgrestList),
+      // le type check et le cast explicites sont donc inutiles.
+      final rows = res.toList();
+
       return rows
           .map(ThixProfile.fromPrivateRow)
           .where((p) => p.thixId.trim().isNotEmpty)
@@ -201,7 +202,7 @@ class ProfileService {
     String? fullName,
     String? photoUrl,
     String? bio,
-    String? thixId,  
+    String? thixId,
     String? profession,
     String? occupation,
     String? countryOrOrigin,
@@ -262,7 +263,7 @@ class ProfileService {
         : userId;
 
     final data = <String, dynamic>{};
-    
+
     // Transforme les String vides ("") en null
     void put(String k, Object? v) {
       if (v is String) {
@@ -279,7 +280,8 @@ class ProfileService {
       }
     }
 
-    double? _parseDoubleOrNull(String? s) {
+    // Renommé sans underscore : c'est une variable/fonction locale, pas privée.
+    double? parseDoubleOrNull(String? s) {
       if (s == null) return null;
       final t = s.trim().replaceAll(',', '.');
       if (t.isEmpty) return null;
@@ -321,9 +323,9 @@ class ProfileService {
     put('emergency_contacts', emergencyContacts);
     put('height', height);
     put('weight', weight);
-    final heightNum = _parseDoubleOrNull(height);
+    final heightNum = parseDoubleOrNull(height);
     if (heightNum != null) data['height_cm'] = heightNum;
-    final weightNum = _parseDoubleOrNull(weight);
+    final weightNum = parseDoubleOrNull(weight);
     if (weightNum != null) data['weight_kg'] = weightNum;
     put('blood_group', bloodGroup);
     if (hasPhysicalDisability != null) data['has_physical_disability'] = hasPhysicalDisability;
@@ -568,8 +570,8 @@ class ProfileService {
       final cc = countryCode ?? 'CD';
       final d = DateTime.now();
       final datePart = '${d.month.toString().padLeft(2, '0')}${d.year.toString().substring(2)}';
-      final numPart = (10000 + rand.nextInt(90000)).toString(); 
-      
+      final numPart = (10000 + rand.nextInt(90000)).toString();
+
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       final alphaPart = String.fromCharCodes(Iterable.generate(3, (_) => chars.codeUnitAt(rand.nextInt(chars.length))));
       final checksum = rand.nextInt(10).toString();
@@ -579,10 +581,10 @@ class ProfileService {
       try {
         final res = await SupabaseConfig.client.from(table).select('id').eq('thix_id', newId).maybeSingle();
         if (res == null) {
-          exists = false; 
+          exists = false;
         }
       } catch (e) {
-        exists = false; 
+        exists = false;
       }
       attempts++;
     }
@@ -597,7 +599,7 @@ class ProfileService {
   /// Réserve un pseudonyme THIX CHAT en vérifiant son unicité
   Future<String> reserveThixChat({required String userId, required String desired}) async {
     final formattedHandle = desired.startsWith('@') ? desired : '@$desired';
-    
+
     try {
       final existing = await SupabaseConfig.client
           .from(table)
@@ -605,16 +607,16 @@ class ProfileService {
           .eq('thix_chat', formattedHandle)
           .neq('id', userId)
           .maybeSingle();
-          
+
       if (existing != null) {
         throw Exception('Ce pseudo THIX CHAT est déjà utilisé.');
       }
-      
+
       await SupabaseConfig.client.from(table).update({
         'thix_chat': formattedHandle,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', userId);
-      
+
       return formattedHandle;
     } catch (e) {
       debugPrint('Error reserveThixChat: $e');
