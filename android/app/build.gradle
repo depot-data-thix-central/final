@@ -91,6 +91,15 @@ android {
             // No fallback to debug signing.
             signingConfig = signingConfigs.release
 
+            // ✅ Requis pour que proguardFiles soit effectivement appliqué :
+            // minification + obfuscation du code natif Kotlin/Java (distinct
+            // de l'obfuscation Dart faite par `flutter build --obfuscate`).
+            minifyEnabled true
+
+            // ✅ Retire les ressources (drawables, layouts, strings) non
+            // utilisées après minification — réduit la taille de l'APK/AAB.
+            shrinkResources true
+
             proguardFiles(
                 getDefaultProguardFile(
                     "proguard-android-optimize.txt"
