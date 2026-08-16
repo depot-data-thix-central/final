@@ -1,3 +1,4 @@
+// lib/supabase/supabase_config.dart
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 
@@ -12,6 +13,9 @@ class SupabaseConfig {
     defaultValue: 'https://lldgnysfiabakhaibgzq.supabase.co',
   );
 
+  /// Clé publique (anciennement "anon key"). Le nom de variable est conservé
+  /// pour compatibilité avec le reste du code, mais elle est désormais passée
+  /// au paramètre `publishableKey` de `Supabase.initialize`.
   static const String anonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
     defaultValue:
@@ -33,7 +37,7 @@ class SupabaseConfig {
 
       await Supabase.initialize(
         url: supabaseUrl,
-        anonKey: anonKey,
+        publishableKey: anonKey,
         debug: kDebugMode,
       );
 
