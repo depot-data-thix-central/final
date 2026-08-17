@@ -533,4 +533,153 @@ class ProvincesService {
       throw Exception('Erreur suppression division administrative: $e');
     }
   }
+  // ============================================================
+  // VILLES
+  // ============================================================
+
+  Future<City> addCity(City city) async {
+    try {
+      final data = city.toJson();
+      data.remove('id');
+      
+      final response = await _client
+          .from('cities')
+          .insert(data)
+          .select()
+          .single();
+          
+      return City.fromJson(response);
+    } catch (e) {
+      throw Exception('Erreur ajout ville: $e');
+    }
+  }
+
+  Future<void> updateCity(City city) async {
+    try {
+      await _client
+          .from('cities')
+          .update(city.toJson())
+          .eq('id', city.id);
+    } catch (e) {
+      throw Exception('Erreur mise à jour ville: $e');
+    }
+  }
+
+  Future<void> deleteCity(String id) async {
+    try {
+      await _client.from('cities').delete().eq('id', id);
+    } catch (e) {
+      throw Exception('Erreur suppression ville: $e');
+    }
+  }
+
+  // ============================================================
+  // SAUVEGARDE COMPLÈTE (Province + Relations)
+  // ============================================================
+
+  Future<Province> saveProvinceWithRelations(Province province) async {
+    try {
+      // 1. Créer ou mettre à jour la province principale
+      Province savedProvince;
+      if (province.id.isEmpty) {
+        savedProvince = await createProvince(province);
+      } else {
+        savedProvince = await updateProvince(province);
+      }
+
+      final provinceId = savedProvince.id;
+
+      // 2. Villes
+      // On supprime les anciennes puis on réinsère (approche simple et fiable)
+      final existingCities = await _client.from('cities').select('id').eq('province_id', provinceId);
+      for (final c in existingCities) {
+        await deleteCity(c['id']);
+      }
+      for (final city in province.cities) {
+        final cityToSave = City(
+          id: '',
+          provinceId: provinceId,
+          name: city.name,
+          population: city.population,
+          isCapital: city.isCapital,
+          mayor: city.mayor,
+          mayorPhotoUrl: city.mayorPhotoUrl,
+          media: city.media,
+        );
+        await addCity(cityToSave);
+      }
+
+      // 3. Ressources économiques
+      final existingEco = await _client.from('province_economic_resources').select('id').eq('province_id', provinceId);
+      for (final e in existingEco) {
+        await deleteEconomicResource(e['id']);
+      }
+      for (final resource in province.economicResources) {
+        final resourceToSave = ProvinceEconomicResource(
+          id: '',
+          provinceId: provinceId,
+          name: resource.name,
+          description: resource.description,
+          media: resource.media,
+        );
+        await addEconomicResource(resourceToSave);
+      }
+
+      // 4. Sites touristiques
+      final existingTourism = await _client.from('province_tourism').select('id').eq('province_id', provinceId);
+      for (final t in existingTourism) {
+        await deleteTourismSite(t['id']);
+      }
+      for (final site in province.tourismSites) {
+        final siteToSave = ProvinceTourism(
+          id: '',
+          provinceId: provinceId,
+          name: site.name,
+          type: site.type,
+          description: site.description,
+          media: site.media,
+        );
+        await addTourismSite(siteToSave);
+      }
+
+      // 5. Divisions administratives
+      final existingAdmin = await _client.from('province_administrative_divisions').select('id').eq('province_id', provinceId);
+      for (final a in existingAdmin) {
+        await deleteAdministrativeDivision(a['id']);
+      }
+      for (final division in province.administrativeDivisions) {
+        final divisionToSave = ProvinceAdministrativeDivision(
+          id: '',
+          provinceId: provinceId,
+          type: division.type,
+          name: division.name,
+          capital: division.capital,
+          population: division.population,
+          area: division.area,
+          administrator: division.administrator,
+          media: division.media,
+        );
+        await addAdministrativeDivision(divisionToSave);
+      }
+
+      // 6. Contacts d'urgence
+      final existingEmergency = await _client.from('province_emergency_contacts').select('id').eq('province_id', provinceId);
+      for (final e in existingEmergency) {
+        await deleteEmergencyContact(e['id']);
+      }
+      for (final contact in province.emergencyContacts) {
+        final contactToSave = ProvinceEmergencyContact(
+          id: '',
+          provinceId: provinceId,
+          service: contact.service,
+          phone: contact.phone,
+        );
+        await addEmergencyContact(contactToSave);
+      }
+
+      return savedProvince;
+    } catch (e) {
+      throw Exception('Erreur sauvegarde complète province: $e');
+    }
+  }
 }
