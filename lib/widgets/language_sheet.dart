@@ -18,8 +18,6 @@ class LanguageSheet extends StatelessWidget {
       {'code': 'ar', 'name': 'العربية', 'flag': '🇸🇦'},
       {'code': 'zh', 'name': '中文', 'flag': '🇨🇳'},
       {'code': 'pt', 'name': 'Português', 'flag': '🇵🇹'},
-      {'code': 'ln', 'name': 'Lingála', 'flag': '🇨🇩'},
-      {'code': 'kg', 'name': 'Kikongo', 'flag': '🇨🇩'},
       {'code': 'sw', 'name': 'Kiswahili', 'flag': '🇹🇿'},
     ];
 
