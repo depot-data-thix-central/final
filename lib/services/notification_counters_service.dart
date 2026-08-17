@@ -4,9 +4,26 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/supabase/supabase_config.dart';
 
-/// Compteurs de notifications non lues, un champ par section de la
-/// constellation d'accueil. Les noms correspondent exactement aux
-/// champs lus par HomeServicesConstellation (c.media, c.info, ...).
+/// Sections de la constellation d'accueil pouvant recevoir des badges
+/// de notifications non lues.
+enum ThixSection {
+  media,
+  info,
+  events,
+  money,
+  market,
+  reservation,
+  jobs,
+  formations,
+  opportunities,
+  network,
+  health,
+  monPays,
+  chat,
+}
+
+/// Compteurs de notifications non lues, un champ par section — noms
+/// exacts attendus par HomeServicesConstellation (c.media, c.info, ...).
 class SectionBadgeCounts {
   final int media;
   final int info;
@@ -43,76 +60,95 @@ class SectionBadgeCounts {
   int get total =>
       media + info + events + money + market + reservation + jobs +
       formations + opportunities + network + health + monPays + chat;
+
+  int forSection(ThixSection section) {
+    switch (section) {
+      case ThixSection.media: return media;
+      case ThixSection.info: return info;
+      case ThixSection.events: return events;
+      case ThixSection.money: return money;
+      case ThixSection.market: return market;
+      case ThixSection.reservation: return reservation;
+      case ThixSection.jobs: return jobs;
+      case ThixSection.formations: return formations;
+      case ThixSection.opportunities: return opportunities;
+      case ThixSection.network: return network;
+      case ThixSection.health: return health;
+      case ThixSection.monPays: return monPays;
+      case ThixSection.chat: return chat;
+    }
+  }
 }
 
 /// Calcule et diffuse en temps réel les compteurs de notifications non
-/// lues par section, pour alimenter les badges de la constellation
-/// d'accueil et la cloche de notifications.
+/// lues par section, pour alimenter les badges de HomeServicesConstellation
+/// et de la cloche de notifications du header.
 class NotificationCountersService {
   final SupabaseClient _client;
   NotificationCountersService({SupabaseClient? client}) : _client = client ?? SupabaseConfig.client;
 
   static const String _table = 'notifications';
 
-  /// Mapping type (colonne `notifications.type`) → section de la
-  /// constellation. Étendre cette map au fur et à mesure que chaque
-  /// module commence à créer des notifications avec de nouveaux types.
-  static const Map<String, String> _typeToSection = {
+  /// Mapping type (colonne `notifications.type`) → section. À étendre
+  /// au fur et à mesure que chaque module commence à créer des
+  /// notifications avec de nouveaux types.
+  static const Map<String, ThixSection> _typeToSection = {
     // Contenu & Médias
-    'media': 'media',
-    'tdia': 'media',
-    'thix_media': 'media',
-    'info': 'info',
-    'thix_info': 'info',
-    'news': 'info',
-    'event': 'events',
-    'evenement': 'events',
+    'media': ThixSection.media,
+    'tdia': ThixSection.media,
+    'thix_media': ThixSection.media,
+    'info': ThixSection.info,
+    'thix_info': ThixSection.info,
+    'news': ThixSection.info,
+    'event': ThixSection.events,
+    'evenement': ThixSection.events,
 
     // Économie & Transactions
-    'money': 'money',
-    'payment': 'money',
-    'thix_money': 'money',
-    'market': 'market',
-    'order': 'market',
-    'shop': 'market',
-    'reservation': 'reservation',
-    'booking': 'reservation',
+    'money': ThixSection.money,
+    'payment': ThixSection.money,
+    'thix_money': ThixSection.money,
+    'market': ThixSection.market,
+    'order': ThixSection.market,
+    'shop': ThixSection.market,
+    'reservation': ThixSection.reservation,
+    'booking': ThixSection.reservation,
 
     // Carrière, Éducation & Réseau
-    'job': 'jobs',
-    'emploi': 'jobs',
-    'formation': 'formations',
-    'course': 'formations',
-    'certificate': 'formations',
-    'opportunity': 'opportunities',
+    'job': ThixSection.jobs,
+    'emploi': ThixSection.jobs,
+    'formation': ThixSection.formations,
+    'course': ThixSection.formations,
+    'certificate': ThixSection.formations,
+    'opportunity': ThixSection.opportunities,
 
     // THIX PRO (réseau) — types réellement en base aujourd'hui
-    'like': 'network',
-    'follow': 'network',
-    'connection': 'network',
-    'comment': 'network',
-    'post': 'network',
-    'mention': 'network',
+    'like': ThixSection.network,
+    'follow': ThixSection.network,
+    'connection': ThixSection.network,
+    'comment': ThixSection.network,
+    'post': ThixSection.network,
+    'mention': ThixSection.network,
 
     // Vie pratique & gouvernement
-    'health': 'health',
-    'thix_sante': 'health',
-    'country': 'monPays',
-    'mon_pays': 'monPays',
-    'civic': 'monPays',
+    'health': ThixSection.health,
+    'thix_sante': ThixSection.health,
+    'country': ThixSection.monPays,
+    'mon_pays': ThixSection.monPays,
+    'civic': ThixSection.monPays,
 
     // THIX CHAT
-    'chat': 'chat',
-    'message': 'chat',
+    'chat': ThixSection.chat,
+    'message': ThixSection.chat,
   };
 
-  /// Flux réactif des compteurs par section pour l'utilisateur connecté.
-  Stream<SectionBadgeCounts> streamSectionBadgeCounts(String uid) {
+  /// Flux réactif des compteurs par section pour l'utilisateur donné.
+  Stream<SectionBadgeCounts> streamCounts(String uid) {
     return _streamUnreadTypes(uid).map(_buildCounts);
   }
 
-  /// Récupération ponctuelle (non réactive), utile pour un pull-to-refresh.
-  Future<SectionBadgeCounts> fetchSectionBadgeCounts(String uid) async {
+  /// Récupération ponctuelle (non réactive) — utile pour un
+  /// pull-to-refresh ou un affichage one-shot.
+  Future<SectionBadgeCounts> fetchCounts(String uid) async {
     try {
       final rows = await _client
           .from(_table)
@@ -121,13 +157,13 @@ class NotificationCountersService {
           .eq('is_read', false);
       return _buildCounts(rows.map((r) => (r['type'] ?? '').toString()).toList());
     } catch (e) {
-      debugPrint('NotificationCountersService: fetchSectionBadgeCounts failed err=$e');
+      debugPrint('NotificationCountersService: fetchCounts failed err=$e');
       return SectionBadgeCounts.zero;
     }
   }
 
   SectionBadgeCounts _buildCounts(List<String> types) {
-    final tally = <String, int>{};
+    final tally = <ThixSection, int>{};
     for (final type in types) {
       final section = _typeToSection[type];
       if (section == null) continue;
@@ -135,27 +171,28 @@ class NotificationCountersService {
     }
 
     return SectionBadgeCounts(
-      media: tally['media'] ?? 0,
-      info: tally['info'] ?? 0,
-      events: tally['events'] ?? 0,
-      money: tally['money'] ?? 0,
-      market: tally['market'] ?? 0,
-      reservation: tally['reservation'] ?? 0,
-      jobs: tally['jobs'] ?? 0,
-      formations: tally['formations'] ?? 0,
-      opportunities: tally['opportunities'] ?? 0,
-      network: tally['network'] ?? 0,
-      health: tally['health'] ?? 0,
-      monPays: tally['monPays'] ?? 0,
-      chat: tally['chat'] ?? 0,
+      media: tally[ThixSection.media] ?? 0,
+      info: tally[ThixSection.info] ?? 0,
+      events: tally[ThixSection.events] ?? 0,
+      money: tally[ThixSection.money] ?? 0,
+      market: tally[ThixSection.market] ?? 0,
+      reservation: tally[ThixSection.reservation] ?? 0,
+      jobs: tally[ThixSection.jobs] ?? 0,
+      formations: tally[ThixSection.formations] ?? 0,
+      opportunities: tally[ThixSection.opportunities] ?? 0,
+      network: tally[ThixSection.network] ?? 0,
+      health: tally[ThixSection.health] ?? 0,
+      monPays: tally[ThixSection.monPays] ?? 0,
+      chat: tally[ThixSection.chat] ?? 0,
     );
   }
 
-  /// Marque comme lues toutes les notifications d'une section donnée —
-  /// appeler quand l'utilisateur ouvre l'écran correspondant.
-  Future<void> markSectionRead(String uid, String sectionKey) async {
+  /// Marque comme lues toutes les notifications non lues d'une section
+  /// donnée — appelé par home_page.dart quand l'utilisateur tape sur
+  /// un nœud de la constellation.
+  Future<void> markSectionSeen({required String uid, required ThixSection section}) async {
     final types = _typeToSection.entries
-        .where((e) => e.value == sectionKey)
+        .where((e) => e.value == section)
         .map((e) => e.key)
         .toList();
     if (types.isEmpty) return;
@@ -168,7 +205,7 @@ class NotificationCountersService {
           .eq('is_read', false)
           .inFilter('type', types);
     } catch (e) {
-      debugPrint('NotificationCountersService: markSectionRead failed section=$sectionKey err=$e');
+      debugPrint('NotificationCountersService: markSectionSeen failed section=$section err=$e');
     }
   }
 
