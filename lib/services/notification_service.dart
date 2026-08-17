@@ -11,7 +11,6 @@ class NotificationService {
 
   static const String _table = 'notifications';
 
-  // Pour éviter de re-afficher la même notification en pop
   final Set<String> _shownPopIds = {};
 
   static bool _isPermanentRealtimeError(RealtimeSubscribeStatus status, Object? err) {
@@ -25,25 +24,23 @@ class NotificationService {
   }
 
   Map<String, dynamic> _normalizeRow(Map<String, dynamic> r) {
-    final data = (r['data'] is Map)
-        ? (r['data'] as Map).cast<String, dynamic>()
-        : (r['payload'] is Map)
-            ? (r['payload'] as Map).cast<String, dynamic>()
-            : const <String, dynamic>{};
-    final read = (r['read'] as bool?) ?? (r['seen'] as bool?) ?? false;
+    final data = (r['data'] is Map) ? (r['data'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    final read = (r['is_read'] as bool?) ?? false;
+    final body = (r['body'] ?? r['content'] ?? '').toString();
     return <String, dynamic>{
       'id': r['id'],
       'user_id': r['user_id'],
-      'type': (r['type'] ?? r['kind'] ?? 'generic').toString(),
+      'sender_id': r['sender_id'],
+      'post_id': r['post_id'],
+      'type': (r['type'] ?? 'generic').toString(),
       'title': (r['title'] ?? 'Notification').toString(),
-      'body': (r['body'] ?? r['message'] ?? r['content'] ?? '').toString(),
+      'body': body,
       'read': read,
       'data': data,
       'created_at': r['created_at'],
     };
   }
 
-  /// Affiche une pop notification système si la notif est nouvelle et non lue
   Future<void> _maybeShowPop(Map<String, dynamic> notif) async {
     final id = notif['id']?.toString();
     if (id == null) return;
@@ -51,8 +48,6 @@ class NotificationService {
     if (_shownPopIds.contains(id)) return;
 
     _shownPopIds.add(id);
-
-    // Garde seulement les 100 derniers pour éviter une fuite mémoire
     if (_shownPopIds.length > 100) {
       _shownPopIds.remove(_shownPopIds.first);
     }
@@ -93,15 +88,10 @@ class NotificationService {
             .order('created_at', ascending: false)
             .limit(50);
 
-        final list = (rows is List)
-            ? rows
-                .map((e) => _normalizeRow((e as Map).cast<String, dynamic>()))
-                .toList(growable: false)
-            : const <Map<String, dynamic>>[];
+        final list = rows.map((e) => _normalizeRow(e)).toList(growable: false);
 
         debugPrint('NotificationService: emitLatest ok uid=$uid count=${list.length}');
 
-        // Affiche une pop pour la notification la plus récente non lue
         if (list.isNotEmpty) {
           unawaited(_maybeShowPop(list.first));
         }
@@ -197,37 +187,32 @@ class NotificationService {
         .distinct();
   }
 
-  /// Ajoute une notification + affiche immédiatement une pop
+  /// Ajoute une notification + affiche immédiatement une pop.
+  /// [senderId] et [postId] sont optionnels — utilisés par les
+  /// notifications sociales THIX PRO (like, commentaire, etc.)
   Future<void> add({
     required String toUid,
     required String type,
     required String title,
     required String body,
+    String? senderId,
+    String? postId,
     Map<String, dynamic>? data,
   }) async {
     try {
-      try {
-        await _client.from(_table).insert({
-          'user_id': toUid,
-          'type': type,
-          'title': title,
-          'body': body,
-          'read': false,
-          'data': data ?? const <String, dynamic>{},
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-        });
-      } catch (e) {
-        debugPrint('NotificationService: insert with rich schema failed, retrying legacy. err=$e');
-        await _client.from(_table).insert({
-          'user_id': toUid,
-          'title': title,
-          'message': body,
-          'seen': false,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-        });
-      }
+      await _client.from(_table).insert({
+        'user_id': toUid,
+        'sender_id': senderId,
+        'post_id': postId,
+        'type': type,
+        'title': title,
+        'body': body,
+        'content': body, // maintenu pour compatibilité avec le code existant lisant 'content'
+        'is_read': false,
+        'data': data ?? const <String, dynamic>{},
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
 
-      // Pop immédiate
       await LocalNotificationService.instance.show(
         id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
         title: title,
@@ -242,19 +227,9 @@ class NotificationService {
 
   Future<void> markRead({required String uid, required String notificationId}) async {
     try {
-      try {
-        await _client
-            .from(_table)
-            .update({'read': true})
-            .eq('id', notificationId)
-            .eq('user_id', uid);
-        return;
-      } catch (e) {
-        debugPrint('NotificationService: markRead set read=true failed, retry legacy. err=$e');
-      }
       await _client
           .from(_table)
-          .update({'seen': true})
+          .update({'is_read': true})
           .eq('id', notificationId)
           .eq('user_id', uid);
     } catch (e) {
@@ -264,13 +239,7 @@ class NotificationService {
 
   Future<void> markAllRead(String uid) async {
     try {
-      try {
-        await _client.from(_table).update({'read': true}).eq('user_id', uid).eq('read', false);
-        return;
-      } catch (e) {
-        debugPrint('NotificationService: markAllRead set read=true failed, retry legacy. err=$e');
-      }
-      await _client.from(_table).update({'seen': true}).eq('user_id', uid).eq('seen', false);
+      await _client.from(_table).update({'is_read': true}).eq('user_id', uid).eq('is_read', false);
     } catch (e) {
       debugPrint('NotificationService: markAllRead failed uid=$uid err=$e');
     }
