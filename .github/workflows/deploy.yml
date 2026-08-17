@@ -45,6 +45,9 @@ jobs:
         # Si votre dépôt a un autre nom, remplacez Sona1 par ce nom exact
         run: flutter build web --release --base-href /Sona1/ --no-wasm-dry-run --no-tree-shake-icons
 
+      - name: Disable Jekyll
+        run: touch build/web/.nojekyll
+
       - name: Deploy to GitHub Pages (Branch gh-pages)
         uses: peaceiris/actions-gh-pages@v3
         with:
