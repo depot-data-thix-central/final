@@ -523,131 +523,152 @@ class _AdminProvinceFormPageState extends ConsumerState<AdminProvinceFormPage> {
   
   void _save() async {
     if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Veuillez remplir les champs obligatoires (avec *).'), backgroundColor: Colors.orange));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Veuillez remplir les champs obligatoires (avec *).'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
+
     setState(() => _isBusy = true);
 
     try {
-      List<City> mappedCities = [];
-      try {
-        mappedCities = _cities.map((c) {
-          final popStr = c['population']?.toString().trim() ?? '';
-          return City.fromJson(<String, dynamic>{
-            'id': c['id']?.toString().isNotEmpty == true ? c['id'] : null,
-            'province_id': _provinceId, 'provinceId': _provinceId,
-            'name': c['name'] ?? '',
-            'population': popStr.isNotEmpty ? int.tryParse(popStr) : null,
-            'is_capital': c['is_capital'] ?? false, 'isCapital': c['is_capital'] ?? false,
-            'mayor': c['mayor'], 'mayor_photo_url': c['mayor_photo_url'], 'mayorPhotoUrl': c['mayor_photo_url'],
-            'media': c['media'] ?? <Map<String, dynamic>>[],
-          });
-        }).toList();
-      } catch(e) { throw 'Section Villes Principales : $e'; }
+      // === Mapping des listes ===
+      List<City> mappedCities = _cities.map((c) {
+        final popStr = c['population']?.toString().trim() ?? '';
+        return City.fromJson({
+          'id': c['id']?.toString().isNotEmpty == true ? c['id'] : null,
+          'province_id': _provinceId,
+          'name': c['name'] ?? '',
+          'population': popStr.isNotEmpty ? popStr : null,
+          'is_capital': c['is_capital'] ?? false,
+          'mayor': c['mayor'],
+          'mayor_photo_url': c['mayor_photo_url'],
+          'media': c['media'] ?? [],
+        });
+      }).toList();
 
-      List<ProvinceEconomicResource> mappedEconomy = [];
-      try {
-        mappedEconomy = _economicSectors.map((e) {
-          return ProvinceEconomicResource.fromJson(<String, dynamic>{
-            'id': e['id']?.toString().isNotEmpty == true ? e['id'] : null,
-            'province_id': _provinceId, 'provinceId': _provinceId,
-            'name': e['name'] ?? '', 'description': e['description'],
-            'media': e['media'] ?? <Map<String, dynamic>>[],
-          });
-        }).toList();
-      } catch(e) { throw 'Section Économie & Secteurs : $e'; }
+      List<ProvinceEconomicResource> mappedEconomy = _economicSectors.map((e) {
+        return ProvinceEconomicResource.fromJson({
+          'id': e['id']?.toString().isNotEmpty == true ? e['id'] : null,
+          'province_id': _provinceId,
+          'name': e['name'] ?? '',
+          'description': e['description'],
+          'media': e['media'] ?? [],
+        });
+      }).toList();
 
-      List<ProvinceTourism> mappedTourism = [];
-      try {
-        mappedTourism = _tourismSites.map((t) {
-          return ProvinceTourism.fromJson(<String, dynamic>{
-            'id': t['id']?.toString().isNotEmpty == true ? t['id'] : null,
-            'province_id': _provinceId, 'provinceId': _provinceId,
-            'name': t['name'] ?? '', 'type': t['type'] ?? '', 'description': t['description'],
-            'media': t['media'] ?? <Map<String, dynamic>>[],
-          });
-        }).toList();
-      } catch(e) { throw 'Section Tourisme & Sites : $e'; }
+      List<ProvinceTourism> mappedTourism = _tourismSites.map((t) {
+        return ProvinceTourism.fromJson({
+          'id': t['id']?.toString().isNotEmpty == true ? t['id'] : null,
+          'province_id': _provinceId,
+          'name': t['name'] ?? '',
+          'type': t['type'] ?? '',
+          'description': t['description'],
+          'media': t['media'] ?? [],
+        });
+      }).toList();
 
-      List<ProvinceAdministrativeDivision> mappedAdmin = [];
-      try {
-        mappedAdmin = _administrativeDivisions.map((a) {
-          final popStr = a['population']?.toString().trim() ?? '';
-          final areaStr = a['area']?.toString().trim() ?? '';
-          return ProvinceAdministrativeDivision.fromJson(<String, dynamic>{
-            'id': a['id']?.toString().isNotEmpty == true ? a['id'] : null,
-            'province_id': _provinceId, 'provinceId': _provinceId,
-            'type': a['type'] ?? 'Territoire', 'name': a['name'] ?? '', 'capital': a['capital'],
-            'population': popStr.isNotEmpty ? int.tryParse(popStr) : null,
-            'area': areaStr.isNotEmpty ? num.tryParse(areaStr) : null,
-            'administrator': a['administrator'], 'media': a['media'] ?? <Map<String, dynamic>>[],
-          });
-        }).toList();
-      } catch(e) { throw 'Section Découpage Administratif : $e'; }
+      List<ProvinceAdministrativeDivision> mappedAdmin = _administrativeDivisions.map((a) {
+        final popStr = a['population']?.toString().trim() ?? '';
+        final areaStr = a['area']?.toString().trim() ?? '';
+        return ProvinceAdministrativeDivision.fromJson({
+          'id': a['id']?.toString().isNotEmpty == true ? a['id'] : null,
+          'province_id': _provinceId,
+          'type': a['type'] ?? 'Territoire',
+          'name': a['name'] ?? '',
+          'capital': a['capital'],
+          'population': popStr.isNotEmpty ? int.tryParse(popStr) : null,
+          'area': areaStr.isNotEmpty ? num.tryParse(areaStr) : null,
+          'administrator': a['administrator'],
+          'media': a['media'] ?? [],
+        });
+      }).toList();
 
-      List<ProvinceEmergencyContact> mappedEmergency = [];
-      try {
-        mappedEmergency = _emergencyContacts.map((e) {
-          return ProvinceEmergencyContact.fromJson(<String, dynamic>{
-            'id': e['id']?.toString().isNotEmpty == true ? e['id'] : null,
-            'province_id': _provinceId, 'provinceId': _provinceId,
-            'service': e['service'], 'service_name': e['service'], 'serviceName': e['service'],
-            'phone': e['phone'], 'phone_number': e['phone'], 'phoneNumber': e['phone'],
-          });
-        }).toList();
-      } catch(e) { throw 'Section Urgences & Contacts : $e'; }
+      List<ProvinceEmergencyContact> mappedEmergency = _emergencyContacts.map((e) {
+        return ProvinceEmergencyContact.fromJson({
+          'id': e['id']?.toString().isNotEmpty == true ? e['id'] : null,
+          'province_id': _provinceId,
+          'service': e['service'],
+          'phone': e['phone'],
+        });
+      }).toList();
 
-      Province province;
-      try {
-        province = Province(
-          id: _provinceId ?? '', name: _nameController.text.trim(), code: _codeController.text.trim(),
-          capital: _capitalController.text.trim(), region: _regionController.text.trim(),
-          area: int.tryParse(_areaController.text.trim()), population: int.tryParse(_populationController.text.trim()),
-          description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
-          
-          history: _historyController.text.trim().isEmpty ? null : _historyController.text.trim(),
-          climate: _climateController.text.trim().isEmpty ? null : _climateController.text.trim(),
-          infrastructure: _infrastructureController.text.trim().isEmpty ? null : _infrastructureController.text.trim(),
-          education: _educationController.text.trim().isEmpty ? null : _educationController.text.trim(),
+      // === Construction de la Province ===
+      final province = Province(
+        id: _provinceId ?? '',
+        name: _nameController.text.trim(),
+        code: _codeController.text.trim(),
+        capital: _capitalController.text.trim(),
+        region: _regionController.text.trim(),
+        area: int.tryParse(_areaController.text.trim()),
+        population: int.tryParse(_populationController.text.trim()),
+        description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
+        history: _historyController.text.trim().isEmpty ? null : _historyController.text.trim(),
+        climate: _climateController.text.trim().isEmpty ? null : _climateController.text.trim(),
+        infrastructure: _infrastructureController.text.trim().isEmpty ? null : _infrastructureController.text.trim(),
+        education: _educationController.text.trim().isEmpty ? null : _educationController.text.trim(),
+        coverImageUrl: _coverImageUrl,
+        coatOfArmsUrl: _coatOfArmsUrl,
+        mapUrl: _mapUrl,
+        website: _websiteController.text.trim().isEmpty ? null : _websiteController.text.trim(),
+        governor: _governorController.text.trim().isEmpty ? null : _governorController.text.trim(),
+        governorPhotoUrl: _governorPhotoUrl,
+        viceGovernor: _viceGovernorController.text.trim().isEmpty ? null : _viceGovernorController.text.trim(),
+        viceGovernorPhotoUrl: _viceGovernorPhotoUrl,
+        government: _government,
+        ministers: _ministers.where((m) => (m['name'] ?? '').trim().isNotEmpty).toList(),
+        cities: mappedCities,
+        economicResources: mappedEconomy,
+        tourismSites: mappedTourism,
+        emergencyContacts: mappedEmergency,
+        administrativeDivisions: mappedAdmin,
+        achievements: _achievements.where((a) => (a['title'] ?? '').trim().isNotEmpty).toList(),
+        tribes: _tribes.where((t) => (t['name'] ?? '').trim().isNotEmpty).toList(),
+        galleryMedia: _galleryMedia,
+        languages: _languagesController.text.trim().isEmpty ? null : _languagesController.text.trim(),
+        resources: _resourcesController.text.trim().isEmpty ? null : _resourcesController.text.trim(),
+        territoriesCount: int.tryParse(_territoriesCountController.text.trim()),
+      );
 
-          coverImageUrl: _coverImageUrl, coatOfArmsUrl: _coatOfArmsUrl, mapUrl: _mapUrl,
-          website: _websiteController.text.trim().isEmpty ? null : _websiteController.text.trim(),
-          governor: _governorController.text.trim().isEmpty ? null : _governorController.text.trim(),
-          governorPhotoUrl: _governorPhotoUrl,
-          viceGovernor: _viceGovernorController.text.trim().isEmpty ? null : _viceGovernorController.text.trim(),
-          viceGovernorPhotoUrl: _viceGovernorPhotoUrl,
-          government: _government,
-          
-          ministers: _ministers.where((m) => (m['name'] ?? '').trim().isNotEmpty).toList(),
-          cities: mappedCities, economicResources: mappedEconomy, tourismSites: mappedTourism,
-          emergencyContacts: mappedEmergency, administrativeDivisions: mappedAdmin,
-          
-          achievements: _achievements.where((a) => (a['title'] ?? '').trim().isNotEmpty).toList(),
-          tribes: _tribes.where((t) => (t['name'] ?? '').trim().isNotEmpty).toList(),
-          galleryMedia: _galleryMedia,
+      // === Sauvegarde complète ===
+      final service = ref.read(provincesServiceProvider);
+      await service.saveProvinceWithRelations(province);
 
-          languages: _languagesController.text.trim().isEmpty ? null : _languagesController.text.trim(),
-          resources: _resourcesController.text.trim().isEmpty ? null : _resourcesController.text.trim(),
-          territoriesCount: int.tryParse(_territoriesCountController.text.trim()),
-        );
-      } catch(e) { throw 'Construction de la province (Infos Générales) : $e'; }
-      
-      if (_isEditing) {
-        await ref.read(adminProvincesProvider.notifier).updateProvince(province);
-      } else {
-        await ref.read(adminProvincesProvider.notifier).createProvince(province);
+      // Rafraîchir les providers
+      ref.invalidate(provincesProvider);
+      ref.invalidate(adminProvincesProvider);
+      if (_provinceId != null) {
+        ref.invalidate(provinceWithAllRelationsProvider(_provinceId!));
       }
-      
+
       if (mounted) {
         setState(() => _isBusy = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Enregistré avec succès !'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Province et toutes les données enregistrées avec succès !'),
+            backgroundColor: Colors.green,
+          ),
+        );
         context.pop();
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isBusy = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Erreur : $e'), backgroundColor: Colors.red, duration: const Duration(seconds: 10), action: SnackBarAction(label: 'Fermer', textColor: Colors.white, onPressed: () {})));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur : $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 12),
+            action: SnackBarAction(
+              label: 'Fermer',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
       }
     }
   }
-}
