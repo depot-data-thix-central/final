@@ -17,8 +17,7 @@ class LocalNotificationService {
   /// Callback appelé quand l'utilisateur tape sur une notification.
   void Function(String? payload)? onNotificationTap;
 
-  /// Alias pour compatibilité avec le code existant qui appelle `init()`
-  /// au lieu de `initialize()`.
+  /// Alias pour compatibilité
   Future<void> init() => initialize();
 
   Future<void> initialize() async {
@@ -27,7 +26,7 @@ class LocalNotificationService {
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false, // On demandera la permission plus tard
+      requestAlertPermission: false, 
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
@@ -37,15 +36,18 @@ class LocalNotificationService {
       iOS: iosSettings,
     );
 
-    await _plugin.initialize(
+    // 🌟 RETOUR DE TON ASTUCE WEB !
+    // Le cast en 'dynamic' empêche le compilateur dart2js (GitHub Actions)
+    // de crasher sur les signatures non conformes des stubs Web du package.
+    await (_plugin as dynamic).initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
-        debugPrint('🔔 Clic notification -> payload: ${response.payload}');
-        onNotificationTap?.call(response.payload);
+        // En dynamic, response peut être n'importe quoi, on utilise '?' par sécurité
+        debugPrint('🔔 Clic notification -> payload: ${response?.payload}');
+        onNotificationTap?.call(response?.payload);
       },
     );
 
-    // 2. Canal Android obligatoire (API 26+)
     const androidChannel = AndroidNotificationChannel(
       _channelId,
       _channelName,
@@ -63,9 +65,8 @@ class LocalNotificationService {
     debugPrint('LocalNotificationService: initialisé');
   }
 
-  /// Demande la permission d'affichage des notifications.
   Future<bool> requestPermission() async {
-    if (kIsWeb) return true; // Le web n'utilise pas permission_handler
+    if (kIsWeb) return true;
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       final status = await Permission.notification.request();
@@ -85,7 +86,6 @@ class LocalNotificationService {
     required String body,
     String? payload,
   }) async {
-    // 3. Sur le Web, on simule l'affichage discrètement dans la console
     if (kIsWeb) {
       debugPrint('🔔 [Web Notification] $title: $body');
       return;
@@ -112,17 +112,18 @@ class LocalNotificationService {
     const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
     try {
-      await _plugin.show(id, title, body, details, payload: payload);
+      // 🌟 On cast en dynamic ici aussi pour éviter le crash "Too many positional arguments" lors du build Web
+      await (_plugin as dynamic).show(id, title, body, details, payload: payload);
     } catch (e) {
       debugPrint('LocalNotificationService: show failed err=$e');
     }
   }
 
   Future<void> cancel(int id) async {
-    if (!kIsWeb) await _plugin.cancel(id);
+    if (!kIsWeb) await (_plugin as dynamic).cancel(id);
   }
 
   Future<void> cancelAll() async {
-    if (!kIsWeb) await _plugin.cancelAll();
+    if (!kIsWeb) await (_plugin as dynamic).cancelAll();
   }
 }
