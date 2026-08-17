@@ -19,11 +19,12 @@ enum ThixSection {
   network,
   health,
   monPays,
-  chat,
+  messages,
 }
 
 /// Compteurs de notifications non lues, un champ par section — noms
-/// exacts attendus par HomeServicesConstellation (c.media, c.info, ...).
+/// exacts attendus par HomeServicesConstellation (c.media, c.info, ...)
+/// et par home_header_delegate.dart / notifications_sheet.dart (c.messages).
 class SectionBadgeCounts {
   final int media;
   final int info;
@@ -37,7 +38,7 @@ class SectionBadgeCounts {
   final int network;
   final int health;
   final int monPays;
-  final int chat;
+  final int messages;
 
   const SectionBadgeCounts({
     this.media = 0,
@@ -52,14 +53,14 @@ class SectionBadgeCounts {
     this.network = 0,
     this.health = 0,
     this.monPays = 0,
-    this.chat = 0,
+    this.messages = 0,
   });
 
   static const zero = SectionBadgeCounts();
 
   int get total =>
       media + info + events + money + market + reservation + jobs +
-      formations + opportunities + network + health + monPays + chat;
+      formations + opportunities + network + health + monPays + messages;
 
   int forSection(ThixSection section) {
     switch (section) {
@@ -75,7 +76,7 @@ class SectionBadgeCounts {
       case ThixSection.network: return network;
       case ThixSection.health: return health;
       case ThixSection.monPays: return monPays;
-      case ThixSection.chat: return chat;
+      case ThixSection.messages: return messages;
     }
   }
 }
@@ -137,8 +138,8 @@ class NotificationCountersService {
     'civic': ThixSection.monPays,
 
     // THIX CHAT
-    'chat': ThixSection.chat,
-    'message': ThixSection.chat,
+    'chat': ThixSection.messages,
+    'message': ThixSection.messages,
   };
 
   /// Flux réactif des compteurs par section pour l'utilisateur donné.
@@ -183,13 +184,14 @@ class NotificationCountersService {
       network: tally[ThixSection.network] ?? 0,
       health: tally[ThixSection.health] ?? 0,
       monPays: tally[ThixSection.monPays] ?? 0,
-      chat: tally[ThixSection.chat] ?? 0,
+      messages: tally[ThixSection.messages] ?? 0,
     );
   }
 
   /// Marque comme lues toutes les notifications non lues d'une section
-  /// donnée — appelé par home_page.dart quand l'utilisateur tape sur
-  /// un nœud de la constellation.
+  /// donnée — appelé par home_page.dart / notifications_sheet.dart
+  /// quand l'utilisateur tape sur un nœud de la constellation ou ouvre
+  /// le panneau de notifications.
   Future<void> markSectionSeen({required String uid, required ThixSection section}) async {
     final types = _typeToSection.entries
         .where((e) => e.value == section)
