@@ -41,6 +41,8 @@
     <!-- ========================================================= -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Requis pour continuer à suivre la position lors d'une alerte THIX SOS en arrière-plan -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- ========================================================= -->
     <!-- 6. NFC                                                    -->
@@ -59,7 +61,17 @@
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
     <!-- ========================================================= -->
-    <!-- 8. NOTIFICATIONS & SYSTÈME                                -->
+    <!-- 8. STOCKAGE & MÉDIAS                                      -->
+    <!-- Importation de documents d'identité et photos de profil   -->
+    <!-- ========================================================= -->
+    <!-- Android 12 et inférieur -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Android 13+ (Permissions granulaires) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
+    <!-- ========================================================= -->
+    <!-- 9. NOTIFICATIONS & SYSTÈME                                -->
     <!-- ========================================================= -->
     <!-- Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -75,7 +87,7 @@
     <!-- ========================================================= -->
     <application
         android:name="${applicationName}"
-        android:label="THIX ID"
+        android:label="Thix Hub"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:fullBackupContent="false"

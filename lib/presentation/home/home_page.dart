@@ -468,6 +468,7 @@ class _HomePagePremiumState extends State<HomePagePremium> {
                     onDocumentTap: _openDocumentVault,
                     onChatTap: _openThixChat,
                     onSecurityTap: _openEmergency,
+                    badgeCountsStream: badgeCountsStream,
                   ),
                 ),
               ),

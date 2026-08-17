@@ -1,281 +1,307 @@
+// lib/services/notification_counters_service.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/supabase/supabase_config.dart';
 
-// ============================================================================
-// ENUM ThixSection (tous les modules)
-// ============================================================================
+/// Sections de la constellation d'accueil pouvant recevoir des badges
+/// de notifications non lues.
 enum ThixSection {
-  messages,
+  media,
   info,
   events,
+  money,
+  market,
+  reservation,
+  jobs,
   formations,
   opportunities,
-  jobs,
-  market,
   network,
   health,
-  money,
   monPays,
-  reservation,
-  media, // TDIA
+  messages,
 }
 
-// ============================================================================
-// CLASSE SectionBadgeCounts
-// ============================================================================
+/// Compteurs de notifications non lues, un champ par section — noms
+/// exacts attendus par HomeServicesConstellation (c.media, c.info, ...)
+/// et par home_header_delegate.dart / notifications_sheet.dart (c.messages).
 class SectionBadgeCounts {
-  final int messages;
+  final int media;
   final int info;
   final int events;
+  final int money;
+  final int market;
+  final int reservation;
+  final int jobs;
   final int formations;
   final int opportunities;
-  final int jobs;
-  final int market;
   final int network;
   final int health;
-  final int money;
   final int monPays;
-  final int reservation;
-  final int media;
+  final int messages;
 
   const SectionBadgeCounts({
-    this.messages = 0,
+    this.media = 0,
     this.info = 0,
     this.events = 0,
+    this.money = 0,
+    this.market = 0,
+    this.reservation = 0,
+    this.jobs = 0,
     this.formations = 0,
     this.opportunities = 0,
-    this.jobs = 0,
-    this.market = 0,
     this.network = 0,
     this.health = 0,
-    this.money = 0,
     this.monPays = 0,
-    this.reservation = 0,
-    this.media = 0,
+    this.messages = 0,
   });
 
   static const zero = SectionBadgeCounts();
 
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is SectionBadgeCounts &&
-        other.messages == messages &&
-        other.info == info &&
-        other.events == events &&
-        other.formations == formations &&
-        other.opportunities == opportunities &&
-        other.jobs == jobs &&
-        other.market == market &&
-        other.network == network &&
-        other.health == health &&
-        other.money == money &&
-        other.monPays == monPays &&
-        other.reservation == reservation &&
-        other.media == media;
-  }
+  int get total =>
+      media + info + events + money + market + reservation + jobs +
+      formations + opportunities + network + health + monPays + messages;
 
-  @override
-  int get hashCode => Object.hash(
-        messages,
-        info,
-        events,
-        formations,
-        opportunities,
-        jobs,
-        market,
-        network,
-        health,
-        money,
-        monPays,
-        reservation,
-        media,
-      );
+  int forSection(ThixSection section) {
+    switch (section) {
+      case ThixSection.media: return media;
+      case ThixSection.info: return info;
+      case ThixSection.events: return events;
+      case ThixSection.money: return money;
+      case ThixSection.market: return market;
+      case ThixSection.reservation: return reservation;
+      case ThixSection.jobs: return jobs;
+      case ThixSection.formations: return formations;
+      case ThixSection.opportunities: return opportunities;
+      case ThixSection.network: return network;
+      case ThixSection.health: return health;
+      case ThixSection.monPays: return monPays;
+      case ThixSection.messages: return messages;
+    }
+  }
 }
 
-// ============================================================================
-// SERVICE NotificationCountersService
-// ============================================================================
+/// Calcule et diffuse en temps réel les compteurs de notifications non
+/// lues par section, pour alimenter les badges de HomeServicesConstellation
+/// et de la cloche de notifications du header.
 class NotificationCountersService {
-  NotificationCountersService({SupabaseClient? client})
-      : _client = client ?? SupabaseConfig.client;
-
   final SupabaseClient _client;
+  NotificationCountersService({SupabaseClient? client}) : _client = client ?? SupabaseConfig.client;
 
-  // Polling toutes les 3 minutes
-  static const _pollingInterval = Duration(seconds: 180);
+  static const String _table = 'notifications';
 
-  // Tables (adapte les noms si besoin selon ta base)
-  static const _infoTable = 'info_articles';
-  static const _eventsTable = 'events';
-  static const _opportunitiesTable = 'opportunities';
-  static const _jobsTable = 'jobs';
-  static const _formationsTable = 'formations';
-  static const _messagesTable = 'messages';
-  static const _marketTable = 'market_products';      // à adapter
-  static const _networkTable = 'network_posts';       // à adapter
-  static const _healthTable = 'health_items';         // à adapter
-  static const _moneyTable = 'money_transactions';    // à adapter
-  static const _monPaysTable = 'mon_pays_items';      // à adapter
-  static const _reservationTable = 'reservations';    // à adapter
-  static const _mediaTable = 'reels';                 // TDIA / Media
+  /// Mapping type (colonne `notifications.type`) → section. À étendre
+  /// au fur et à mesure que chaque module commence à créer des
+  /// notifications avec de nouveaux types.
+  static const Map<String, ThixSection> _typeToSection = {
+    // Contenu & Médias
+    'media': ThixSection.media,
+    'tdia': ThixSection.media,
+    'thix_media': ThixSection.media,
+    'info': ThixSection.info,
+    'thix_info': ThixSection.info,
+    'news': ThixSection.info,
+    'event': ThixSection.events,
+    'evenement': ThixSection.events,
 
-  String _prefKey(String uid, ThixSection section) =>
-    'last_seen_\( {uid}_ \){section.name}';
+    // Économie & Transactions
+    'money': ThixSection.money,
+    'payment': ThixSection.money,
+    'thix_money': ThixSection.money,
+    'market': ThixSection.market,
+    'order': ThixSection.market,
+    'shop': ThixSection.market,
+    'reservation': ThixSection.reservation,
+    'booking': ThixSection.reservation,
 
-  Future<DateTime?> _getLastSeen(String uid, ThixSection section) async {
+    // Carrière, Éducation & Réseau
+    'job': ThixSection.jobs,
+    'emploi': ThixSection.jobs,
+    'formation': ThixSection.formations,
+    'course': ThixSection.formations,
+    'certificate': ThixSection.formations,
+    'opportunity': ThixSection.opportunities,
+
+    // THIX PRO (réseau) — types réellement en base aujourd'hui
+    'like': ThixSection.network,
+    'follow': ThixSection.network,
+    'connection': ThixSection.network,
+    'comment': ThixSection.network,
+    'post': ThixSection.network,
+    'mention': ThixSection.network,
+
+    // Vie pratique & gouvernement
+    'health': ThixSection.health,
+    'thix_sante': ThixSection.health,
+    'country': ThixSection.monPays,
+    'mon_pays': ThixSection.monPays,
+    'civic': ThixSection.monPays,
+
+    // THIX CHAT
+    'chat': ThixSection.messages,
+    'message': ThixSection.messages,
+  };
+
+  /// Flux réactif des compteurs par section pour l'utilisateur donné.
+  Stream<SectionBadgeCounts> streamCounts(String uid) {
+    return _streamUnreadTypes(uid).map(_buildCounts);
+  }
+
+  /// Récupération ponctuelle (non réactive) — utile pour un
+  /// pull-to-refresh ou un affichage one-shot.
+  Future<SectionBadgeCounts> fetchCounts(String uid) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final ms = prefs.getInt(_prefKey(uid, section));
-      if (ms == null) return null;
-      return DateTime.fromMillisecondsSinceEpoch(ms);
+      final rows = await _client
+          .from(_table)
+          .select('type')
+          .eq('user_id', uid)
+          .eq('is_read', false);
+      return _buildCounts(rows.map((r) => (r['type'] ?? '').toString()).toList());
     } catch (e) {
-      return null;
+      debugPrint('NotificationCountersService: fetchCounts failed err=$e');
+      return SectionBadgeCounts.zero;
     }
   }
 
-  Future<void> _setLastSeen(String uid, ThixSection section) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(
-        _prefKey(uid, section),
-        DateTime.now().millisecondsSinceEpoch,
-      );
-    } catch (e) {
-      debugPrint('_setLastSeen error: $e');
+  SectionBadgeCounts _buildCounts(List<String> types) {
+    final tally = <ThixSection, int>{};
+    for (final type in types) {
+      final section = _typeToSection[type];
+      if (section == null) continue;
+      tally[section] = (tally[section] ?? 0) + 1;
     }
-  }
-
-  Future<int> _countSince({required String table, DateTime? since}) async {
-    try {
-      var query = _client.from(table).select('id');
-      if (since != null) {
-        query = query.gt('created_at', since.toIso8601String());
-      }
-      final response = await query;
-      return response is List ? response.length : 0;
-    } catch (e) {
-      // Table peut ne pas exister encore → on renvoie 0
-      return 0;
-    }
-  }
-
-  Future<int> _countMessagesSince(String uid, DateTime? since) async {
-    try {
-      // A. Direct receiver_id
-      var q = _client
-          .from(_messagesTable)
-          .select('id')
-          .eq('receiver_id', uid)
-          .eq('is_read', false)
-          .eq('is_deleted', false);
-
-      if (since != null) {
-        q = q.gt('created_at', since.toIso8601String());
-      }
-
-      final res = await q;
-      final direct = res is List ? res.length : 0;
-      if (direct > 0) return direct;
-
-      // B. Fallback : messages dans mes conversations, pas envoyés par moi, non lus
-      final conv = await _client
-          .from('conversation_members') // adapte le nom si besoin
-          .select('conversation_id')
-          .eq('user_id', uid);
-
-      if (conv is! List || conv.isEmpty) return 0;
-
-      final ids = conv
-          .map((e) => e['conversation_id']?.toString())
-          .whereType<String>()
-          .toList();
-      if (ids.isEmpty) return 0;
-
-      var q2 = _client
-          .from(_messagesTable)
-          .select('id')
-          .inFilter('conversation_id', ids)
-          .neq('sender_id', uid)
-          .eq('is_read', false)
-          .eq('is_deleted', false);
-
-      if (since != null) {
-        q2 = q2.gt('created_at', since.toIso8601String());
-      }
-
-      final res2 = await q2;
-      return res2 is List ? res2.length : 0;
-    } catch (e) {
-      debugPrint('countMessages error: $e');
-      return 0;
-    }
-  }
-
-  Future<SectionBadgeCounts> _computeCounts(String uid) async {
-    final results = await Future.wait([
-      _countMessagesSince(uid, await _getLastSeen(uid, ThixSection.messages)),
-      _countSince(table: _infoTable, since: await _getLastSeen(uid, ThixSection.info)),
-      _countSince(table: _eventsTable, since: await _getLastSeen(uid, ThixSection.events)),
-      _countSince(table: _formationsTable, since: await _getLastSeen(uid, ThixSection.formations)),
-      _countSince(table: _opportunitiesTable, since: await _getLastSeen(uid, ThixSection.opportunities)),
-      _countSince(table: _jobsTable, since: await _getLastSeen(uid, ThixSection.jobs)),
-      _countSince(table: _marketTable, since: await _getLastSeen(uid, ThixSection.market)),
-      _countSince(table: _networkTable, since: await _getLastSeen(uid, ThixSection.network)),
-      _countSince(table: _healthTable, since: await _getLastSeen(uid, ThixSection.health)),
-      _countSince(table: _moneyTable, since: await _getLastSeen(uid, ThixSection.money)),
-      _countSince(table: _monPaysTable, since: await _getLastSeen(uid, ThixSection.monPays)),
-      _countSince(table: _reservationTable, since: await _getLastSeen(uid, ThixSection.reservation)),
-      _countSince(table: _mediaTable, since: await _getLastSeen(uid, ThixSection.media)),
-    ]);
 
     return SectionBadgeCounts(
-      messages: results[0],
-      info: results[1],
-      events: results[2],
-      formations: results[3],
-      opportunities: results[4],
-      jobs: results[5],
-      market: results[6],
-      network: results[7],
-      health: results[8],
-      money: results[9],
-      monPays: results[10],
-      reservation: results[11],
-      media: results[12],
+      media: tally[ThixSection.media] ?? 0,
+      info: tally[ThixSection.info] ?? 0,
+      events: tally[ThixSection.events] ?? 0,
+      money: tally[ThixSection.money] ?? 0,
+      market: tally[ThixSection.market] ?? 0,
+      reservation: tally[ThixSection.reservation] ?? 0,
+      jobs: tally[ThixSection.jobs] ?? 0,
+      formations: tally[ThixSection.formations] ?? 0,
+      opportunities: tally[ThixSection.opportunities] ?? 0,
+      network: tally[ThixSection.network] ?? 0,
+      health: tally[ThixSection.health] ?? 0,
+      monPays: tally[ThixSection.monPays] ?? 0,
+      messages: tally[ThixSection.messages] ?? 0,
     );
   }
 
-  Future<void> markSectionSeen({
-    required String uid,
-    required ThixSection section,
-  }) async {
-    await _setLastSeen(uid, section);
+  /// Marque comme lues toutes les notifications non lues d'une section
+  /// donnée — appelé par home_page.dart / notifications_sheet.dart
+  /// quand l'utilisateur tape sur un nœud de la constellation ou ouvre
+  /// le panneau de notifications.
+  Future<void> markSectionSeen({required String uid, required ThixSection section}) async {
+    final types = _typeToSection.entries
+        .where((e) => e.value == section)
+        .map((e) => e.key)
+        .toList();
+    if (types.isEmpty) return;
+
+    try {
+      await _client
+          .from(_table)
+          .update({'is_read': true})
+          .eq('user_id', uid)
+          .eq('is_read', false)
+          .inFilter('type', types);
+    } catch (e) {
+      debugPrint('NotificationCountersService: markSectionSeen failed section=$section err=$e');
+    }
   }
 
-  Stream<SectionBadgeCounts> streamCounts(String uid) {
-    final controller = StreamController<SectionBadgeCounts>.broadcast();
-    Timer? pollTimer;
+  // ─── Flux bas niveau : types non lus, avec fallback polling ──────────
 
-    Future<void> emit() async {
-      if (controller.isClosed) return;
-      final counts = await _computeCounts(uid);
-      if (!controller.isClosed) controller.add(counts);
+  Stream<List<String>> _streamUnreadTypes(String uid) {
+    late final StreamController<List<String>> controller;
+    RealtimeChannel? channel;
+    var closedRetries = 0;
+    Timer? retryTimer;
+    var isCancelled = false;
+    Timer? pollTimer;
+    var polling = false;
+
+    Future<void> emitLatest() async {
+      try {
+        final rows = await _client
+            .from(_table)
+            .select('type')
+            .eq('user_id', uid)
+            .eq('is_read', false);
+        controller.add(rows.map((r) => (r['type'] ?? '').toString()).toList());
+      } catch (e) {
+        debugPrint('NotificationCountersService: emitLatest failed uid=$uid err=$e');
+        controller.add(const <String>[]);
+      }
     }
 
-    controller.onListen = () {
-      unawaited(emit());
-      pollTimer = Timer.periodic(_pollingInterval, (_) => unawaited(emit()));
-    };
-
-    controller.onCancel = () {
+    void startPolling() {
+      if (polling) return;
+      polling = true;
       pollTimer?.cancel();
-      controller.close();
+      pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => unawaited(emitLatest()));
+    }
+
+    controller = StreamController<List<String>>.broadcast(
+      onListen: () => unawaited(emitLatest()),
+    );
+
+    Future<void> subscribeOrRetry() async {
+      if (isCancelled || polling) return;
+      retryTimer?.cancel();
+
+      try {
+        if (channel != null) await _client.removeChannel(channel!);
+      } catch (_) {}
+
+      channel = _client.channel('notification_counters:$uid');
+      try {
+        channel!
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: _table,
+              filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid),
+              callback: (payload) => unawaited(emitLatest()),
+            )
+            .subscribe((status, [err]) {
+              if (isCancelled) return;
+
+              if (status == RealtimeSubscribeStatus.channelError) {
+                startPolling();
+                return;
+              }
+
+              final shouldRetry = err != null || status == RealtimeSubscribeStatus.closed;
+              if (!shouldRetry) {
+                closedRetries = 0;
+                return;
+              }
+
+              closedRetries = (closedRetries + 1).clamp(1, 10);
+              final delayMs = (500 * (1 << (closedRetries - 1))).clamp(500, 8000);
+              retryTimer?.cancel();
+              retryTimer = Timer(Duration(milliseconds: delayMs), () {
+                unawaited(subscribeOrRetry());
+              });
+            });
+      } catch (e) {
+        debugPrint('NotificationCountersService: realtime wiring failed, fallback polling. err=$e');
+        startPolling();
+      }
+    }
+
+    unawaited(subscribeOrRetry());
+
+    controller.onCancel = () async {
+      isCancelled = true;
+      retryTimer?.cancel();
+      pollTimer?.cancel();
+      final ch = channel;
+      if (ch != null) await _client.removeChannel(ch);
     };
 
-    return controller.stream.distinct();
+    return controller.stream;
   }
 }
