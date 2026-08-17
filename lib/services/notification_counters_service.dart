@@ -2,102 +2,180 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:thix_id/models/notification/notification_module.dart';
 import 'package:thix_id/supabase/supabase_config.dart';
 
+/// Compteurs de notifications non lues, un champ par section de la
+/// constellation d'accueil. Les noms correspondent exactement aux
+/// champs lus par HomeServicesConstellation (c.media, c.info, ...).
+class SectionBadgeCounts {
+  final int media;
+  final int info;
+  final int events;
+  final int money;
+  final int market;
+  final int reservation;
+  final int jobs;
+  final int formations;
+  final int opportunities;
+  final int network;
+  final int health;
+  final int monPays;
+  final int chat;
+
+  const SectionBadgeCounts({
+    this.media = 0,
+    this.info = 0,
+    this.events = 0,
+    this.money = 0,
+    this.market = 0,
+    this.reservation = 0,
+    this.jobs = 0,
+    this.formations = 0,
+    this.opportunities = 0,
+    this.network = 0,
+    this.health = 0,
+    this.monPays = 0,
+    this.chat = 0,
+  });
+
+  static const zero = SectionBadgeCounts();
+
+  int get total =>
+      media + info + events + money + market + reservation + jobs +
+      formations + opportunities + network + health + monPays + chat;
+}
+
 /// Calcule et diffuse en temps réel les compteurs de notifications non
-/// lues, globalement et par module (badges affichés sur chaque bulle
-/// du hub d'accueil : THIX CHAT, THIX MONEY, THIX SANTÉ, etc.).
+/// lues par section, pour alimenter les badges de la constellation
+/// d'accueil et la cloche de notifications.
 class NotificationCountersService {
   final SupabaseClient _client;
   NotificationCountersService({SupabaseClient? client}) : _client = client ?? SupabaseConfig.client;
 
   static const String _table = 'notifications';
 
-  /// Flux du nombre total de notifications non lues pour l'utilisateur.
-  Stream<int> streamTotalUnread(String uid) {
-    return _streamUnreadRows(uid).map((rows) => rows.length);
+  /// Mapping type (colonne `notifications.type`) → section de la
+  /// constellation. Étendre cette map au fur et à mesure que chaque
+  /// module commence à créer des notifications avec de nouveaux types.
+  static const Map<String, String> _typeToSection = {
+    // Contenu & Médias
+    'media': 'media',
+    'tdia': 'media',
+    'thix_media': 'media',
+    'info': 'info',
+    'thix_info': 'info',
+    'news': 'info',
+    'event': 'events',
+    'evenement': 'events',
+
+    // Économie & Transactions
+    'money': 'money',
+    'payment': 'money',
+    'thix_money': 'money',
+    'market': 'market',
+    'order': 'market',
+    'shop': 'market',
+    'reservation': 'reservation',
+    'booking': 'reservation',
+
+    // Carrière, Éducation & Réseau
+    'job': 'jobs',
+    'emploi': 'jobs',
+    'formation': 'formations',
+    'course': 'formations',
+    'certificate': 'formations',
+    'opportunity': 'opportunities',
+
+    // THIX PRO (réseau) — types réellement en base aujourd'hui
+    'like': 'network',
+    'follow': 'network',
+    'connection': 'network',
+    'comment': 'network',
+    'post': 'network',
+    'mention': 'network',
+
+    // Vie pratique & gouvernement
+    'health': 'health',
+    'thix_sante': 'health',
+    'country': 'monPays',
+    'mon_pays': 'monPays',
+    'civic': 'monPays',
+
+    // THIX CHAT
+    'chat': 'chat',
+    'message': 'chat',
+  };
+
+  /// Flux réactif des compteurs par section pour l'utilisateur connecté.
+  Stream<SectionBadgeCounts> streamSectionBadgeCounts(String uid) {
+    return _streamUnreadTypes(uid).map(_buildCounts);
   }
 
-  /// Flux d'une map { module: compteur non lu } pour tous les modules
-  /// définis dans [NotificationModule]. Les modules sans notification
-  /// non lue ont un compteur de 0 (jamais absents de la map).
-  Stream<Map<NotificationModule, int>> streamCountersByModule(String uid) {
-    return _streamUnreadRows(uid).map((rows) {
-      final counts = <NotificationModule, int>{
-        for (final m in NotificationModule.values) m: 0,
-      };
-
-      for (final row in rows) {
-        final type = (row['type'] ?? '').toString();
-        final module = _moduleForType(type);
-        counts[module] = (counts[module] ?? 0) + 1;
-      }
-
-      return counts;
-    });
-  }
-
-  /// Flux du compteur non lu pour UN SEUL module — pratique pour un
-  /// widget de badge isolé qui ne veut pas écouter toute la map.
-  Stream<int> streamCounterForModule(String uid, NotificationModule module) {
-    return streamCountersByModule(uid).map((counts) => counts[module] ?? 0);
-  }
-
-  /// Récupère les compteurs une seule fois (non réactif), utile pour un
-  /// affichage ponctuel ou un rafraîchissement manuel (pull-to-refresh).
-  Future<Map<NotificationModule, int>> fetchCountersByModule(String uid) async {
+  /// Récupération ponctuelle (non réactive), utile pour un pull-to-refresh.
+  Future<SectionBadgeCounts> fetchSectionBadgeCounts(String uid) async {
     try {
       final rows = await _client
           .from(_table)
           .select('type')
           .eq('user_id', uid)
           .eq('is_read', false);
-
-      final counts = <NotificationModule, int>{
-        for (final m in NotificationModule.values) m: 0,
-      };
-
-      for (final row in rows) {
-        final type = (row['type'] ?? '').toString();
-        final module = _moduleForType(type);
-        counts[module] = (counts[module] ?? 0) + 1;
-      }
-
-      return counts;
+      return _buildCounts(rows.map((r) => (r['type'] ?? '').toString()).toList());
     } catch (e) {
-      debugPrint('NotificationCountersService: fetchCountersByModule failed err=$e');
-      return {for (final m in NotificationModule.values) m: 0};
+      debugPrint('NotificationCountersService: fetchSectionBadgeCounts failed err=$e');
+      return SectionBadgeCounts.zero;
     }
   }
 
-  /// Marque comme lues toutes les notifications d'un module donné —
-  /// utile quand l'utilisateur ouvre l'écran correspondant (ex: ouvrir
-  /// THIX CHAT marque toutes les notifs de chat comme lues).
-  Future<void> markModuleRead(String uid, NotificationModule module) async {
+  SectionBadgeCounts _buildCounts(List<String> types) {
+    final tally = <String, int>{};
+    for (final type in types) {
+      final section = _typeToSection[type];
+      if (section == null) continue;
+      tally[section] = (tally[section] ?? 0) + 1;
+    }
+
+    return SectionBadgeCounts(
+      media: tally['media'] ?? 0,
+      info: tally['info'] ?? 0,
+      events: tally['events'] ?? 0,
+      money: tally['money'] ?? 0,
+      market: tally['market'] ?? 0,
+      reservation: tally['reservation'] ?? 0,
+      jobs: tally['jobs'] ?? 0,
+      formations: tally['formations'] ?? 0,
+      opportunities: tally['opportunities'] ?? 0,
+      network: tally['network'] ?? 0,
+      health: tally['health'] ?? 0,
+      monPays: tally['monPays'] ?? 0,
+      chat: tally['chat'] ?? 0,
+    );
+  }
+
+  /// Marque comme lues toutes les notifications d'une section donnée —
+  /// appeler quand l'utilisateur ouvre l'écran correspondant.
+  Future<void> markSectionRead(String uid, String sectionKey) async {
+    final types = _typeToSection.entries
+        .where((e) => e.value == sectionKey)
+        .map((e) => e.key)
+        .toList();
+    if (types.isEmpty) return;
+
     try {
       await _client
           .from(_table)
           .update({'is_read': true})
           .eq('user_id', uid)
           .eq('is_read', false)
-          .inFilter('type', module.typeKeys);
+          .inFilter('type', types);
     } catch (e) {
-      debugPrint('NotificationCountersService: markModuleRead failed module=$module err=$e');
+      debugPrint('NotificationCountersService: markSectionRead failed section=$sectionKey err=$e');
     }
   }
 
-  NotificationModule _moduleForType(String type) {
-    for (final module in NotificationModule.values) {
-      if (module.typeKeys.contains(type)) return module;
-    }
-    return NotificationModule.generic;
-  }
+  // ─── Flux bas niveau : types non lus, avec fallback polling ──────────
 
-  // ─── Flux bas niveau : lignes non lues, avec fallback polling ────────
-
-  Stream<List<Map<String, dynamic>>> _streamUnreadRows(String uid) {
-    late final StreamController<List<Map<String, dynamic>>> controller;
+  Stream<List<String>> _streamUnreadTypes(String uid) {
+    late final StreamController<List<String>> controller;
     RealtimeChannel? channel;
     var closedRetries = 0;
     Timer? retryTimer;
@@ -112,10 +190,10 @@ class NotificationCountersService {
             .select('type')
             .eq('user_id', uid)
             .eq('is_read', false);
-        controller.add(rows);
+        controller.add(rows.map((r) => (r['type'] ?? '').toString()).toList());
       } catch (e) {
         debugPrint('NotificationCountersService: emitLatest failed uid=$uid err=$e');
-        controller.add(const <Map<String, dynamic>>[]);
+        controller.add(const <String>[]);
       }
     }
 
@@ -126,7 +204,7 @@ class NotificationCountersService {
       pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => unawaited(emitLatest()));
     }
 
-    controller = StreamController<List<Map<String, dynamic>>>.broadcast(
+    controller = StreamController<List<String>>.broadcast(
       onListen: () => unawaited(emitLatest()),
     );
 
