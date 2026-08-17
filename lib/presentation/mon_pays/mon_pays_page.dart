@@ -92,52 +92,72 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
   // ─── Build principal ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final isAdmin = ref.watch(isAdminProvider).value ?? false;
+
     return Scaffold(
       backgroundColor: ThixPolicy.surface,
       body: CustomScrollView(
         slivers: [
-          _buildTopBar(),
+          _buildTopBar(isAdmin),
           SliverToBoxAdapter(
             child: Column(
               children: [
                 const SizedBox(height: ThixPolicy.s12),
-                _buildPatrioticCarousel(),
+                
+                // 1. CARROUSEL HERO
+                _buildPatrioticCarousel(isAdmin),
                 const SizedBox(height: ThixPolicy.s20),
+                
+                // 2. AUTORITÉS
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
                   child: _buildAutoritesFullWidth(),
                 ),
                 const SizedBox(height: ThixPolicy.s20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
-                  child: _buildAgencesFull(),
-                ),
-                const SizedBox(height: ThixPolicy.s20),
+
+                // 3. À LA UNE (Déplacé ici)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
                   child: _buildALaUneFull(),
                 ),
                 const SizedBox(height: ThixPolicy.s20),
+
+                // 4. AGENCES
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
+                  child: _buildAgencesFull(),
+                ),
+                const SizedBox(height: ThixPolicy.s20),
+                
+                // 5. PROVINCES
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
                   child: _buildProvincesSection(),
                 ),
                 const SizedBox(height: ThixPolicy.s20),
+
+                // 6. NOUVELLE SECTION: CITOYENS EXEMPLAIRES
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
+                  child: _buildCitoyensExemplairesFull(),
+                ),
+                const SizedBox(height: ThixPolicy.s20),
+
+                // 7. ACCÈS RAPIDES
                 _buildQuickAccess(),
                 const SizedBox(height: ThixPolicy.s16),
+                
+                // 8. ALERTES
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
                   child: _buildAlertRow(),
                 ),
                 const SizedBox(height: ThixPolicy.s20),
+                
+                // 9. FIGURES HISTORIQUES
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
                   child: _buildFiguresHistoriquesBig(),
-                ),
-                const SizedBox(height: ThixPolicy.s20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
-                  child: _buildCitoyensBanner(),
                 ),
                 const SizedBox(height: 110), // Espace pour la bottom nav
               ],
@@ -150,9 +170,7 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
   }
 
   // ─── Barre supérieure ────────────────────────────────────────────
-  Widget _buildTopBar() {
-    final adminAsync = ref.watch(isAdminProvider);
-
+  Widget _buildTopBar(bool isAdmin) {
     return SliverAppBar(
       pinned: true,
       floating: true,
@@ -223,35 +241,29 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
           ),
 
           // ── Bouton Espace Admin ──
-          adminAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-            data: (isAdmin) {
-              if (!isAdmin) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: _goToAdminSpace,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: rdcRed, width: 2),
-                      ),
-                      child: const CircleAvatar(
-                        radius: 16,
-                        backgroundColor: ThixPolicy.primaryDeep,
-                        child: Icon(Icons.admin_panel_settings, color: Colors.white, size: 18),
-                      ),
+          if (isAdmin)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: _goToAdminSpace,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: rdcRed, width: 2),
+                    ),
+                    child: const CircleAvatar(
+                      radius: 16,
+                      backgroundColor: ThixPolicy.primaryDeep,
+                      child: Icon(Icons.admin_panel_settings, color: Colors.white, size: 18),
                     ),
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            ),
         ],
       ),
     );
@@ -274,7 +286,7 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
   }
 
   // ─── Carrousel patriotique ──────────────────────────────────────
-  Widget _buildPatrioticCarousel() {
+  Widget _buildPatrioticCarousel(bool isAdmin) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -286,9 +298,9 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
             borderRadius: BorderRadius.circular(ThixPolicy.rSm),
             boxShadow: ThixPolicy.shadowSoft(),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Text(
+              const Text(
                 'Espace Citoyen',
                 style: TextStyle(
                   color: Colors.white,
@@ -296,8 +308,8 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
                   fontSize: 16,
                 ),
               ),
-              SizedBox(width: 8),
-              Expanded(
+              const SizedBox(width: 8),
+              const Expanded(
                 child: Text(
                   'Informer • Comprendre • Participer',
                   style: TextStyle(
@@ -307,6 +319,24 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
                   ),
                 ),
               ),
+              if (isAdmin)
+                InkWell(
+                  onTap: () => _showComingSoon(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.add_a_photo, color: Colors.white, size: 14),
+                        SizedBox(width: 4),
+                        Text('Ajouter', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                )
             ],
           ),
         ),
@@ -321,61 +351,99 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
               final p = patrioticPosters[index];
               return Container(
                 margin: const EdgeInsets.only(right: 12, left: 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(ThixPolicy.rLg),
-                  image: DecorationImage(
-                    image: NetworkImage(p['img']!),
-                    fit: BoxFit.cover,
-                    onError: (_, __) {},
-                  ),
-                  boxShadow: ThixPolicy.shadowSoft(),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(ThixPolicy.rLg),
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        ThixPolicy.primaryDeep.withOpacity(0.95),
-                        Colors.transparent,
-                      ],
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Image de fond
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(ThixPolicy.rLg),
+                        image: DecorationImage(
+                          image: NetworkImage(p['img']!),
+                          fit: BoxFit.cover,
+                          onError: (_, __) {},
+                        ),
+                        boxShadow: ThixPolicy.shadowSoft(),
+                      ),
                     ),
-                  ),
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
+                    // Gradient et textes
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(ThixPolicy.rLg),
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            ThixPolicy.primaryDeep.withOpacity(0.95),
+                            Colors.transparent,
+                          ],
                         ),
-                        decoration: BoxDecoration(
-                          color: ThixPolicy.gold,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          p['title']!,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: ThixPolicy.textMain,
+                      ),
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: ThixPolicy.gold,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              p['title']!,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: ThixPolicy.textMain,
+                              ),
+                            ),
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            p['subtitle']!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Boutons Admin (Modifier/Supprimer)
+                    if (isAdmin)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Row(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                              child: IconButton(
+                                icon: const Icon(Icons.edit, color: Colors.white, size: 18),
+                                onPressed: () => _showComingSoon(),
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(8),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                              child: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                                onPressed: () => _showComingSoon(),
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(8),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        p['subtitle']!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               );
             },
@@ -653,6 +721,116 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
     );
   }
 
+  // ─── À la Une ───────────────────────────────────────────────────
+  Widget _buildALaUneFull() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ThixPolicy.rXl),
+        border: Border.all(color: ThixPolicy.border),
+        boxShadow: ThixPolicy.shadowSoft(),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                'À la Une',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: ThixPolicy.primaryDeep,
+                  fontSize: 16,
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: () => _showComingSoon(),
+                child: const Text(
+                  'Voir toutes',
+                  style: TextStyle(
+                    color: ThixPolicy.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 165,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 5,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                return Container(
+                  width: 140,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(ThixPolicy.rSm),
+                    color: ThixPolicy.surface,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(ThixPolicy.rSm),
+                        ),
+                        child: Image.network(
+                          'https://picsum.photos/200/120?random=$i',
+                          height: 90,
+                          width: 140,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 90,
+                            width: 140,
+                            color: Colors.grey.shade200,
+                            child: const Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '27 Mai 2026',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: ThixPolicy.textSecondary,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Inauguration du Pont Maréchal',
+                              maxLines: 2,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: ThixPolicy.textMain,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Agences & Institutions ─────────────────────────────────────
   Widget _buildAgencesFull() {
     final items = [
@@ -676,7 +854,7 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
           Row(
             children: [
               const Text(
-                '4. Agences et Institutions',
+                'Agences et Institutions',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   color: ThixPolicy.primaryDeep,
@@ -753,116 +931,6 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
     );
   }
 
-  // ─── À la Une ───────────────────────────────────────────────────
-  Widget _buildALaUneFull() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ThixPolicy.rXl),
-        border: Border.all(color: ThixPolicy.border),
-        boxShadow: ThixPolicy.shadowSoft(),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Text(
-                '3. À la Une',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: ThixPolicy.primaryDeep,
-                  fontSize: 16,
-                ),
-              ),
-              const Spacer(),
-              InkWell(
-                onTap: () => _showComingSoon(),
-                child: const Text(
-                  'Voir toutes',
-                  style: TextStyle(
-                    color: ThixPolicy.primary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 165,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: 5,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, i) {
-                return Container(
-                  width: 140,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(ThixPolicy.rSm),
-                    color: ThixPolicy.surface,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(ThixPolicy.rSm),
-                        ),
-                        child: Image.network(
-                          'https://picsum.photos/200/120?random=$i',
-                          height: 90,
-                          width: 140,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            height: 90,
-                            width: 140,
-                            color: Colors.grey.shade200,
-                            child: const Icon(
-                              Icons.broken_image,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '27 Mai 2025',
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: ThixPolicy.textSecondary,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Inauguration du Pont Maréchal',
-                              maxLines: 2,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: ThixPolicy.textMain,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ─── Provinces ──────────────────────────────────────────────────
   Widget _buildProvincesSection() {
     final prov = ref.watch(provincesProvider(null));
@@ -924,10 +992,28 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CircleAvatar(
-                              radius: 16,
-                              backgroundColor: ThixPolicy.primary,
-                              child: Text(p.code.substring(0, 2), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            // 🌟 Affichage du Blason de la Province ou Initiales
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: ThixPolicy.primary,
+                                shape: BoxShape.circle,
+                                image: p.coatOfArmsUrl != null && p.coatOfArmsUrl!.trim().isNotEmpty
+                                    ? DecorationImage(
+                                        image: NetworkImage(p.coatOfArmsUrl!),
+                                        fit: BoxFit.contain,
+                                      )
+                                    : null,
+                              ),
+                              child: (p.coatOfArmsUrl == null || p.coatOfArmsUrl!.trim().isEmpty)
+                                  ? Center(
+                                      child: Text(
+                                        p.code.length >= 2 ? p.code.substring(0, 2).toUpperCase() : p.code.toUpperCase(),
+                                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    )
+                                  : null,
                             ),
                             const Spacer(),
                             Text(
@@ -957,6 +1043,100 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
           ),
         );
       },
+    );
+  }
+
+  // ─── Citoyens Exemplaires ─────────────────────────────────────────
+  Widget _buildCitoyensExemplairesFull() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ThixPolicy.rXl),
+        border: Border.all(color: ThixPolicy.border),
+        boxShadow: ThixPolicy.shadowSoft(),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Citoyens Exemplaires',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: ThixPolicy.primaryDeep,
+                  fontSize: 16,
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: () => _showComingSoon(),
+                child: const Text(
+                  'Voir tous',
+                  style: TextStyle(color: ThixPolicy.primary, fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Ils bâtissent la RDC au quotidien par leur excellence.',
+            style: TextStyle(
+              color: ThixPolicy.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 5,
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              itemBuilder: (context, i) {
+                return SizedBox(
+                  width: 80,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: ThixPolicy.gold, width: 2),
+                        ),
+                        child: CircleAvatar(
+                          radius: 34,
+                          backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=${40 + i}'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Patriote',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: ThixPolicy.textMain,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Text(
+                        'Excellence',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: ThixPolicy.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1071,7 +1251,7 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
           Row(
             children: [
               const Text(
-                '2. Figures Historiques',
+                'Figures Historiques',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   color: ThixPolicy.primaryDeep,
@@ -1158,54 +1338,7 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
     );
   }
 
-  // ─── Bannière Citoyens Exemplaires ────────────────────────────
-  Widget _buildCitoyensBanner() => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: ThixPolicy.brandGradient,
-          borderRadius: BorderRadius.circular(ThixPolicy.rLg),
-          boxShadow: ThixPolicy.shadowCard(),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.star, color: ThixPolicy.gold, size: 28),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Citoyens Exemplaires',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    'Ils bâtissent la RDC chaque jour',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ThixPolicy.gold,
-                foregroundColor: ThixPolicy.primaryDeep,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ThixPolicy.rSm))
-              ),
-              onPressed: () => _showComingSoon(),
-              child: const Text('Découvrir', style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ],
-        ),
-      );
-
-  // ─── Barre de navigation inférieure (Style Entreprise avec Armoiries) ───
+  // ─── Barre de navigation inférieure ────────────────────────────────
   Widget _buildBottomNav() => Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1221,9 +1354,9 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
             _nav(Icons.home_rounded, 'Accueil', '/'),
             _nav(Icons.flag_rounded, 'Mon Pays', '/mon-pays'),
             
-            // 🌟 NOUVEAU : Blason RDC au centre (remplace le shield jaune/bleu)
+            // Blason RDC au centre
             InkWell(
-              onTap: () => _showComingSoon(), // Action centrale
+              onTap: () => _showComingSoon(),
               borderRadius: BorderRadius.circular(30),
               child: Container(
                 padding: const EdgeInsets.all(6),
@@ -1234,11 +1367,11 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
                   border: Border.all(color: ThixPolicy.border),
                 ),
                 child: Image.asset(
-                  'assets/images/1000103460.png', // ⚠️ Vérifie que le chemin correspond à ton pubspec.yaml
+                  'assets/images/1000103460.png',
                   width: 32,
                   height: 32,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.account_balance, color: ThixPolicy.primaryDeep, size: 28), // Fallback de sécurité
+                  errorBuilder: (_, __, ___) => const Icon(Icons.account_balance, color: ThixPolicy.primaryDeep, size: 28),
                 ),
               ),
             ),
