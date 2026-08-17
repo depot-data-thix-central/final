@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'providers/news_provider.dart';
 
 // ✅ Import de la Policy de Design
 import 'package:thix_id/core/theme/thix_design_policy.dart';
@@ -721,8 +724,12 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
     );
   }
 
-  // ─── À la Une ───────────────────────────────────────────────────
+  
+    // ─── À la Une (Connecté à Supabase) ─────────────────────────────
   Widget _buildALaUneFull() {
+    // 1. On écoute le provider des actualités
+    final newsAsync = ref.watch(newsProvider);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -732,6 +739,7 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
         boxShadow: ThixPolicy.shadowSoft(),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -745,7 +753,7 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
               ),
               const Spacer(),
               InkWell(
-                onTap: () => _showComingSoon(),
+                onTap: () => context.push('/mon-pays/news'), // Redirige vers la liste complète
                 child: const Text(
                   'Voir toutes',
                   style: TextStyle(
@@ -758,70 +766,112 @@ class _MonPaysPageState extends ConsumerState<MonPaysPage> {
             ],
           ),
           const SizedBox(height: 12),
+          
+          // 2. Gestion des états : Chargement, Erreur, ou Données
           SizedBox(
             height: 165,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: 5,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, i) {
-                return Container(
-                  width: 140,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(ThixPolicy.rSm),
-                    color: ThixPolicy.surface,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(ThixPolicy.rSm),
+            child: newsAsync.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(color: ThixPolicy.primary),
+              ),
+              error: (err, _) => Center(
+                child: Text('Erreur de chargement', style: TextStyle(color: Colors.red.shade300)),
+              ),
+              data: (newsList) {
+                // Si la base de données est vide
+                if (newsList.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'Aucune actualité pour le moment.',
+                      style: TextStyle(color: ThixPolicy.textSecondary, fontSize: 13),
+                    ),
+                  );
+                }
+
+                // On prend seulement les 5 plus récentes pour l'accueil
+                final topNews = newsList.take(5).toList();
+
+                return ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: topNews.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final article = topNews[i];
+                    
+                    // Formatage de la date (ex: 27 Mai 2026)
+                    String dateStr = '';
+                    if (article.publishedAt != null) {
+                      dateStr = DateFormat('dd MMM yyyy', 'fr_FR').format(article.publishedAt!);
+                    }
+
+                    return InkWell(
+                      onTap: () {
+                        // Navigation future vers le détail de l'article
+                        _showComingSoon(); 
+                      },
+                      child: Container(
+                        width: 140,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(ThixPolicy.rSm),
+                          color: ThixPolicy.surface,
                         ),
-                        child: Image.network(
-                          'https://picsum.photos/200/120?random=$i',
-                          height: 90,
-                          width: 140,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            height: 90,
-                            width: 140,
-                            color: Colors.grey.shade200,
-                            child: const Icon(
-                              Icons.broken_image,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.all(8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '27 Mai 2026',
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: ThixPolicy.textSecondary,
+                            // Image de l'article
+                            ClipRRect(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(ThixPolicy.rSm),
                               ),
+                              child: article.coverImageUrl != null && article.coverImageUrl!.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: article.coverImageUrl!,
+                                      height: 90,
+                                      width: 140,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => Container(color: Colors.grey.shade200, height: 90, width: 140),
+                                      errorWidget: (_, __, ___) => Container(color: Colors.grey.shade200, height: 90, width: 140, child: const Icon(Icons.broken_image, color: Colors.grey)),
+                                    )
+                                  : Container(
+                                      height: 90,
+                                      width: 140,
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(Icons.newspaper, color: Colors.grey),
+                                    ),
                             ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Inauguration du Pont Maréchal',
-                              maxLines: 2,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: ThixPolicy.textMain,
+                            // Textes (Date + Titre)
+                            Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    dateStr.isNotEmpty ? dateStr : 'Récemment',
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      color: ThixPolicy.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    article.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: ThixPolicy.textMain,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
