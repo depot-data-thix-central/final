@@ -15,16 +15,19 @@ class LocalNotificationService {
   static const String _channelDescription = 'Notifications importantes de THIX ID';
 
   /// Callback appelé quand l'utilisateur tape sur une notification.
-  /// Idéal pour écouter depuis le main.dart et rediriger via GoRouter.
   void Function(String? payload)? onNotificationTap;
 
+  /// Alias pour compatibilité avec le code existant qui appelle `init()`
+  /// au lieu de `initialize()`.
+  Future<void> init() => initialize();
+
   Future<void> initialize() async {
-    // 1. On ignore l'initialisation native sur le Web pour éviter les crashs
+    // 1. Protection Web : on évite d'exécuter du code natif sur navigateur
     if (_initialized || kIsWeb) return;
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false, // On demandera la permission plus tard (meilleure UX)
+      requestAlertPermission: false, // On demandera la permission plus tard
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
@@ -42,7 +45,7 @@ class LocalNotificationService {
       },
     );
 
-    // 2. Création du canal Android (Requis pour Android 8+)
+    // 2. Canal Android obligatoire (API 26+)
     const androidChannel = AndroidNotificationChannel(
       _channelId,
       _channelName,
@@ -61,9 +64,8 @@ class LocalNotificationService {
   }
 
   /// Demande la permission d'affichage des notifications.
-  /// À appeler après l'onboarding ou la connexion.
   Future<bool> requestPermission() async {
-    if (kIsWeb) return true;
+    if (kIsWeb) return true; // Le web n'utilise pas permission_handler
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       final status = await Permission.notification.request();
@@ -83,7 +85,7 @@ class LocalNotificationService {
     required String body,
     String? payload,
   }) async {
-    // 3. Sur le web, on simule l'affichage dans la console
+    // 3. Sur le Web, on simule l'affichage discrètement dans la console
     if (kIsWeb) {
       debugPrint('🔔 [Web Notification] $title: $body');
       return;
