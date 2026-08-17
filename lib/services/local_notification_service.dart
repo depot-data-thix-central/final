@@ -2,34 +2,31 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:timezone/data/latest.dart' as tz;
 
 class LocalNotificationService {
-  static final LocalNotificationService instance = LocalNotificationService._();
   LocalNotificationService._();
+  static final LocalNotificationService instance = LocalNotificationService._();
 
-  // 🌟 ASTUCE WEB : On type en 'dynamic' pour empêcher le compilateur dart2js 
-  // de déclencher l'erreur "Too many positional arguments" sur le Web.
-  final dynamic _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
-  Future<void> init() async {
-    if (_initialized) return;
+  static const String _channelId = 'thix_id_high_importance';
+  static const String _channelName = 'THIX ID Notifications';
+  static const String _channelDescription = 'Notifications importantes de THIX ID';
 
-    // 🌟 ASTUCE WEB : On bloque l'exécution native si on est sur navigateur
-    if (kIsWeb) {
-      _initialized = true;
-      debugPrint('LocalNotificationService: Désactivé sur le Web');
-      return;
-    }
+  /// Callback appelé quand l'utilisateur tape sur une notification.
+  /// Idéal pour écouter depuis le main.dart et rediriger via GoRouter.
+  void Function(String? payload)? onNotificationTap;
 
-    tz.initializeTimeZones();
+  Future<void> initialize() async {
+    // 1. On ignore l'initialisation native sur le Web pour éviter les crashs
+    if (_initialized || kIsWeb) return;
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false, // On demandera la permission plus tard (meilleure UX)
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
     const initSettings = InitializationSettings(
@@ -39,16 +36,17 @@ class LocalNotificationService {
 
     await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (details) {
-        debugPrint('LocalNotification tapped → payload: ${details.payload}');
-        // Ici tu pourras plus tard faire de la navigation avec go_router
+      onDidReceiveNotificationResponse: (response) {
+        debugPrint('🔔 Clic notification -> payload: ${response.payload}');
+        onNotificationTap?.call(response.payload);
       },
     );
 
-    const channel = AndroidNotificationChannel(
-      'thix_high_importance',
-      'THIX Notifications',
-      description: 'Notifications importantes de THIX ID',
+    // 2. Création du canal Android (Requis pour Android 8+)
+    const androidChannel = AndroidNotificationChannel(
+      _channelId,
+      _channelName,
+      description: _channelDescription,
       importance: Importance.high,
       playSound: true,
       enableVibration: true,
@@ -56,19 +54,25 @@ class LocalNotificationService {
 
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+        ?.createNotificationChannel(androidChannel);
 
     _initialized = true;
-    debugPrint('LocalNotificationService: initialized');
+    debugPrint('LocalNotificationService: initialisé');
   }
 
+  /// Demande la permission d'affichage des notifications.
+  /// À appeler après l'onboarding ou la connexion.
   Future<bool> requestPermission() async {
-    // 🌟 On ignore la permission native sur le Web
     if (kIsWeb) return true;
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       final status = await Permission.notification.request();
       return status.isGranted;
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final granted = await _plugin
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+      return granted ?? false;
     }
     return true;
   }
@@ -79,36 +83,44 @@ class LocalNotificationService {
     required String body,
     String? payload,
   }) async {
-    if (!_initialized) await init();
-
-    // 🌟 Sur le Web, on se contente d'afficher un log au lieu de planter
+    // 3. Sur le web, on simule l'affichage dans la console
     if (kIsWeb) {
       debugPrint('🔔 [Web Notification] $title: $body');
       return;
     }
 
+    if (!_initialized) await initialize();
+
     const androidDetails = AndroidNotificationDetails(
-      'thix_high_importance',
-      'THIX Notifications',
-      channelDescription: 'Notifications importantes de THIX ID',
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
       importance: Importance.high,
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
     );
-
+    
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
     );
 
-    await _plugin.show(
-      id,
-      title,
-      body,
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
-      payload: payload,
-    );
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+
+    try {
+      await _plugin.show(id, title, body, details, payload: payload);
+    } catch (e) {
+      debugPrint('LocalNotificationService: show failed err=$e');
+    }
+  }
+
+  Future<void> cancel(int id) async {
+    if (!kIsWeb) await _plugin.cancel(id);
+  }
+
+  Future<void> cancelAll() async {
+    if (!kIsWeb) await _plugin.cancelAll();
   }
 }
