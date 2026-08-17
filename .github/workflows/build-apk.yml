@@ -27,23 +27,13 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # ✅ Obfuscation activée : le code Dart est obscurci, les symboles de
-      # debug sont extraits à part (nécessaires pour décoder les stack traces
-      # de crash plus tard, ex. avec Firebase Crashlytics ou Sentry).
+      # ✅ CORRECTION ICI : Retrait de --no-enable-impeller
       - name: Build release App Bundle
-        run: |
-          flutter build appbundle \
-            --release \
-            --obfuscate \
-            --split-debug-info=build/app/outputs/symbols
+        run: flutter build appbundle --release
 
+      # ✅ CORRECTION ICI : Retrait de --no-enable-impeller
       - name: Build release APKs (split by ABI)
-        run: |
-          flutter build apk \
-            --release \
-            --split-per-abi \
-            --obfuscate \
-            --split-debug-info=build/app/outputs/symbols
+        run: flutter build apk --release --split-per-abi
 
       - name: Upload App Bundle artifact
         uses: actions/upload-artifact@v4
@@ -56,12 +46,3 @@ jobs:
         with:
           name: app-release-apks-split
           path: build/app/outputs/flutter-apk/*.apk
-
-      # ✅ Sans cet artefact, les symboles de debug obfusqués sont perdus
-      # après le build — impossible de déobfusquer un crash reçu en prod.
-      - name: Upload debug symbols artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-debug-symbols
-          path: build/app/outputs/symbols
-          retention-days: 90
