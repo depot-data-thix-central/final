@@ -1,12 +1,8 @@
 // lib/services/local_notification_service.dart
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-/// Gère l'affichage des notifications système (pop) sur l'appareil,
-/// qu'elles viennent d'un événement local (Realtime Supabase) ou
-/// d'un message FCM reçu en foreground.
 class LocalNotificationService {
   LocalNotificationService._();
   static final LocalNotificationService instance = LocalNotificationService._();
@@ -18,16 +14,21 @@ class LocalNotificationService {
   static const String _channelName = 'THIX ID';
   static const String _channelDescription = 'Notifications THIX ID';
 
-  /// Callback appelé quand l'utilisateur tape sur une notification
-  /// (payload = souvent l'id de la notif ou une route à ouvrir).
   void Function(String? payload)? onNotificationTap;
 
   Future<void> initialize() async {
     if (_initialized) return;
+    if (kIsWeb) {
+      // flutter_local_notifications ne supporte pas le web ; les
+      // notifications web passent uniquement par le service worker FCM.
+      _initialized = true;
+      debugPrint('LocalNotificationService: skip init (web)');
+      return;
+    }
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false, // demandé explicitement via requestPermission()
+      requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
@@ -44,7 +45,6 @@ class LocalNotificationService {
       },
     );
 
-    // Canal Android obligatoire à partir d'Android 8 (API 26+)
     const androidChannel = AndroidNotificationChannel(
       _channelId,
       _channelName,
@@ -59,14 +59,18 @@ class LocalNotificationService {
     debugPrint('LocalNotificationService: initialisé');
   }
 
-  /// Demande la permission d'affichage des notifications (Android 13+ / iOS).
-  /// À appeler une fois, typiquement après connexion de l'utilisateur.
+  /// Alias pour compatibilité avec le code existant qui appelle `init()`
+  /// au lieu de `initialize()`.
+  Future<void> init() => initialize();
+
   Future<bool> requestPermission() async {
-    if (Platform.isAndroid) {
+    if (kIsWeb) return true;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
       final status = await Permission.notification.request();
       return status.isGranted;
     }
-    if (Platform.isIOS) {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
       final granted = await _plugin
           .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(alert: true, badge: true, sound: true);
@@ -81,6 +85,10 @@ class LocalNotificationService {
     required String body,
     String? payload,
   }) async {
+    if (kIsWeb) {
+      debugPrint('LocalNotificationService: show skipped (web) title=$title');
+      return;
+    }
     if (!_initialized) await initialize();
 
     const androidDetails = AndroidNotificationDetails(
@@ -106,6 +114,13 @@ class LocalNotificationService {
     }
   }
 
-  Future<void> cancel(int id) => _plugin.cancel(id);
-  Future<void> cancelAll() => _plugin.cancelAll();
+  Future<void> cancel(int id) async {
+    if (kIsWeb) return;
+    await _plugin.cancel(id);
+  }
+
+  Future<void> cancelAll() async {
+    if (kIsWeb) return;
+    await _plugin.cancelAll();
+  }
 }
