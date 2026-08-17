@@ -7,9 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // ✅ Ajout du cache
+import 'package:cached_network_image/cached_network_image.dart'; 
 
-// ✅ THIX Design System v1
 import 'package:thix_id/core/theme/thix_design_policy.dart';
 
 import 'package:thix_id/models/network_story.dart';
@@ -21,7 +20,7 @@ import 'widgets/create_story_dialog.dart';
 import 'widgets/post_card.dart';
 import 'widgets/story_viewer.dart';
 import 'package:thix_id/presentation/network/live/live_prep_screen.dart';
-import 'package:thix_id/presentation/network/live/live_viewer_screen.dart'; // ✅ Import de l'écran spectateur
+import 'package:thix_id/presentation/network/live/live_viewer_screen.dart'; 
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PALETTE THIX PRO — Monochrome Entreprise
@@ -55,7 +54,7 @@ final activeLiveSessionsProvider = StreamProvider.autoDispose<List<Map<String, d
 });
 
 // ============================================================================
-// COMPOSANT — AVATAR ROND (monochrome, contour fin)
+// COMPOSANT — AVATAR ROND
 // ============================================================================
 class RoundAvatar extends StatelessWidget {
   final double size;
@@ -89,7 +88,6 @@ class RoundAvatar extends StatelessWidget {
           child: ClipOval(
             child: Container(
               color: _Pro.surface,
-              // ✅ Utilisation de CachedNetworkImage pour l'avatar
               child: (imageUrl != null && imageUrl!.isNotEmpty)
                   ? CachedNetworkImage(
                       imageUrl: imageUrl!, 
@@ -134,7 +132,9 @@ class _NetworkProHomeState extends ConsumerState<NetworkProHome> with AutomaticK
   static DateTime? _lastRefreshTime;
   static const _refreshCooldown = Duration(seconds: 60);
 
-  String _feedType = 'all';
+  // 🌟 Par défaut, on charge le nouvel algorithme "Pour vous"
+  String _feedType = 'foryou'; 
+  
   List<NetworkStory> _stories = [];
   bool _loadingStories = true;
   List<dynamic> _suggestions = [];
@@ -249,85 +249,93 @@ class _NetworkProHomeState extends ConsumerState<NetworkProHome> with AutomaticK
       );
     }
 
-    return Scaffold(
-      backgroundColor: _Pro.surface,
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            color: _Pro.primary,
-            backgroundColor: _Pro.card,
-            onRefresh: _onRefresh,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              slivers: [
-                _buildSliverAppBar(isLive: liveHostIds.contains(currentUser.id)),
+    // 🌟 POPSCOPE : Intercepte le bouton retour du téléphone pour rentrer au Hub Central
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        // Retourne à l'accueil THIX ID CENTRAL (ajuste la route si besoin, ex: '/home')
+        context.go('/'); 
+      },
+      child: Scaffold(
+        backgroundColor: _Pro.surface,
+        body: Stack(
+          children: [
+            RefreshIndicator(
+              color: _Pro.primary,
+              backgroundColor: _Pro.card,
+              onRefresh: _onRefresh,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                slivers: [
+                  _buildSliverAppBar(isLive: liveHostIds.contains(currentUser.id)),
 
-                SliverToBoxAdapter(
-                  child: _QuickPostEntryCard(
-                    avatarUrl: currentUser.photoUrl,
-                    onTap: () => showDialog(context: context, builder: (_) => const CreatePostDialog()),
-                  ),
-                ),
-
-                SliverToBoxAdapter(child: _buildStories(currentUser.id, liveHostIds)),
-
-                SliverToBoxAdapter(child: _buildFilters()),
-
-                // Hub Live — se rétracte/étend automatiquement selon la donnée
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16, vertical: ThixPolicy.s12),
-                    child: _AutoLiveHub(liveSessionsAsync: liveSessionsAsync),
-                  ),
-                ),
-
-                if (_suggestions.isNotEmpty) SliverToBoxAdapter(child: _buildSuggestions(liveHostIds)),
-
-                feedAsync.when(
-                  loading: () => SliverToBoxAdapter(child: _buildShimmerFeed()),
-                  error: (e, _) => SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(child: Text('Erreur: $e', style: const TextStyle(color: _Pro.textSecondary))),
+                  SliverToBoxAdapter(
+                    child: _QuickPostEntryCard(
+                      avatarUrl: currentUser.photoUrl,
+                      onTap: () => showDialog(context: context, builder: (_) => const CreatePostDialog()),
                     ),
                   ),
-                  data: (posts) {
-                    if (posts.isEmpty) return SliverToBoxAdapter(child: _buildEmpty());
-                    return SliverList.builder(
-                      itemCount: posts.length,
-                      itemBuilder: (c, i) {
-                        final post = posts[i];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: ThixPolicy.s8),
-                          child: PostCard(
-                            key: ValueKey(post.id),
-                            post: post,
-                            currentProfileId: currentUser.id,
-                            onLike: null,
-                            onComment: () => _openComments(post.id),
-                            onShare: () => _showShareSheet(post),
-                            onDelete: () => ref.read(feedProvider.notifier).deletePost(post.id),
-                            onRefresh: null,
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 120)),
-              ],
-            ),
-          ),
 
-          ValueListenableBuilder<bool>(
-            valueListenable: _navVisible,
-            builder: (context, visible, _) => Positioned(
-              left: 0, right: 0, bottom: 0,
-              child: _buildBottomNav(visible),
+                  SliverToBoxAdapter(child: _buildStories(currentUser.id, liveHostIds)),
+
+                  SliverToBoxAdapter(child: _buildFilters()),
+
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16, vertical: ThixPolicy.s12),
+                      child: _AutoLiveHub(liveSessionsAsync: liveSessionsAsync),
+                    ),
+                  ),
+
+                  if (_suggestions.isNotEmpty) SliverToBoxAdapter(child: _buildSuggestions(liveHostIds)),
+
+                  feedAsync.when(
+                    loading: () => SliverToBoxAdapter(child: _buildShimmerFeed()),
+                    error: (e, _) => SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: Center(child: Text('Erreur: $e', style: const TextStyle(color: _Pro.textSecondary))),
+                      ),
+                    ),
+                    data: (posts) {
+                      if (posts.isEmpty) return SliverToBoxAdapter(child: _buildEmpty());
+                      return SliverList.builder(
+                        itemCount: posts.length,
+                        itemBuilder: (c, i) {
+                          final post = posts[i];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: ThixPolicy.s8),
+                            child: PostCard(
+                              key: ValueKey(post.id),
+                              post: post,
+                              currentProfileId: currentUser.id,
+                              onLike: null,
+                              onComment: () => _openComments(post.id),
+                              onShare: () => _showShareSheet(post),
+                              onDelete: () => ref.read(feedProvider.notifier).deletePost(post.id),
+                              onRefresh: null,
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                ],
+              ),
             ),
-          ),
-        ],
+
+            ValueListenableBuilder<bool>(
+              valueListenable: _navVisible,
+              builder: (context, visible, _) => Positioned(
+                left: 0, right: 0, bottom: 0,
+                child: _buildBottomNav(visible),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -350,14 +358,14 @@ class _NetworkProHomeState extends ConsumerState<NetworkProHome> with AutomaticK
         _appBarIcon(icon: Icons.search_rounded, onTap: () => _safePush('/network/search')),
         const SizedBox(width: ThixPolicy.s8),
         _appBarIcon(icon: Icons.notifications_none_rounded, onTap: () => _safePush('/network/notifications')),
-        const SizedBox(width: ThixPolicy.s8),
-        _appBarIcon(icon: Icons.mail_outline_rounded, onTap: () => _safePush('/network/chat')),
+        // 🌟 L'icône de message a été retirée ici
         const SizedBox(width: ThixPolicy.s12),
         
         Padding(
           padding: const EdgeInsets.only(right: ThixPolicy.s16),
           child: GestureDetector(
-            onTap: () => _safePush('/network/profile'),
+            // 🌟 Correction de la route Profile
+            onTap: () => _safePush('/network/profile'), 
             child: RoundAvatar(size: 34, ringWidth: 1.6, isLive: isLive),
           ),
         ),
@@ -444,11 +452,12 @@ class _NetworkProHomeState extends ConsumerState<NetworkProHome> with AutomaticK
 
   // ─────────────────────────── FILTRES ───────────────────────────
   Widget _buildFilters() {
+    // 🌟 Mise à jour des filtres pour l'algorithme "Pour Vous"
     final filters = {
-      'all': ('Pour vous', Icons.auto_awesome_outlined),
+      'foryou': ('Pour vous', Icons.auto_awesome_outlined),
       'network': ('Abonnements', Icons.people_alt_outlined),
-      'popular': ('Tendances', Icons.trending_up_rounded),
       'recent': ('Récents', Icons.schedule_outlined),
+      'popular': ('Tendances', Icons.trending_up_rounded),
     };
 
     return Container(
@@ -664,7 +673,8 @@ class _NetworkProHomeState extends ConsumerState<NetworkProHome> with AutomaticK
                         _navBtn(Icons.home_rounded, 'Accueil', true, () => _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut)),
                         _navBtn(Icons.explore_outlined, 'Découvrir', false, () => _safePush('/network/discover')),
                         _navBtn(Icons.add_circle_outline_rounded, 'Publier', false, () => showDialog(context: context, builder: (_) => const CreatePostDialog())),
-                        _navBtn(Icons.groups_outlined, 'Réseau', false, () => _safePush('/network/connections')),
+                        // 🌟 "Réseau" a été remplacé par "Messages" pointant vers la bonne route
+                        _navBtn(Icons.mail_outline_rounded, 'Messages', false, () => _safePush('/network/messages')), 
                         _navBtn(Icons.diversity_3_outlined, 'Communauté', false, () => _safePush('/network/communities')),
                       ],
                     ),
@@ -775,7 +785,6 @@ class _AutoLiveHubState extends State<_AutoLiveHub> {
     }
   }
 
-  // ✅ CORRECTION DE LA NAVIGATION ICI : Redirection vers LiveViewerScreen
   void _joinLive([Map<String, dynamic>? session]) {
     if (session == null) {
       Navigator.push(context, MaterialPageRoute(builder: (context) => const LivePrepScreen()));
@@ -787,7 +796,7 @@ class _AutoLiveHubState extends State<_AutoLiveHub> {
             liveId: session['id']?.toString() ?? '',
             channelName: session['channel_name']?.toString() ?? '',
             hostName: session['host_name']?.toString() ?? 'Hôte THIX',
-            hostAvatarUrl: session['host_avatar']?.toString(), // Optionnel si disponible dans la DB
+            hostAvatarUrl: session['host_avatar']?.toString(), 
           ),
         ),
       );
@@ -976,7 +985,6 @@ class _StoryCard extends StatelessWidget {
             Positioned.fill(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                // ✅ Utilisation de CachedNetworkImage pour la story
                 child: (coverUrl != null && coverUrl!.isNotEmpty)
                     ? CachedNetworkImage(
                         imageUrl: coverUrl!,

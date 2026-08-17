@@ -1,9 +1,11 @@
 // lib/presentation/home/home_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart'; // ✅ Nécessaire pour choisir la photo
 
 import 'package:thix_id/auth/auth_controller.dart';
 import 'package:thix_id/models/thix_profile.dart';
@@ -44,12 +46,137 @@ class _HomePagePremiumState extends State<HomePagePremium> {
   
   static final RegExp _uidLikeRegex = RegExp(r'^[A-Za-z0-9-]{20,}$');
   bool _searching = false;
+  
+  // ✅ Variables pour la gestion Admin
+  bool _isAdmin = false;
+  bool _uploadingBanner = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdminRole();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     _headlinesController.dispose();
     super.dispose();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // LOGIQUE ADMIN (Bannières)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _checkAdminRole() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('role, account_type')
+          .eq('id', user.id)
+          .maybeSingle();
+          
+      if (data != null && mounted) {
+        final role = (data['role'] ?? data['account_type'] ?? '').toString().toLowerCase();
+        if (role == 'admin' || role == 'entreprise' || role == 'support') {
+          setState(() => _isAdmin = true);
+        }
+      }
+    } catch (_) {
+      // Ignorer silencieusement si erreur
+    }
+  }
+
+  Future<void> _showAddBannerDialog() async {
+    final titleCtrl = TextEditingController();
+    final typeCtrl = TextEditingController(text: 'À la une');
+    
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ThixPolicy.surface,
+        title: const Text('Nouvelle annonce', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleCtrl, 
+              decoration: const InputDecoration(labelText: 'Titre de l\'annonce', border: OutlineInputBorder())
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: typeCtrl, 
+              decoration: const InputDecoration(labelText: 'Tag (ex: Opportunité, Info)', border: OutlineInputBorder())
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textSecondary))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: ThixPolicy.primary),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickAndUploadBanner(titleCtrl.text.trim(), typeCtrl.text.trim());
+            },
+            child: const Text('Choisir une photo', style: TextStyle(color: Colors.white)),
+          )
+        ],
+      )
+    );
+  }
+
+  Future<void> _pickAndUploadBanner(String title, String type) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+      if (bytes == null) return;
+
+      setState(() => _uploadingBanner = true);
+
+      final ext = file.extension ?? 'jpg';
+      final fileName = 'banner_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final storagePath = 'annonces/$fileName';
+      
+      // 1. Upload sur le Storage (Assure-toi d'avoir un bucket public nommé 'banners')
+      await Supabase.instance.client.storage
+          .from('banners')
+          .uploadBinary(storagePath, bytes);
+
+      final publicUrl = Supabase.instance.client.storage
+          .from('banners')
+          .getPublicUrl(storagePath);
+
+      // 2. Insertion dans la table 'banners'
+      await Supabase.instance.client.from('banners').insert({
+        'image_url': publicUrl,
+        'title': title.isEmpty ? 'Nouvelle annonce' : title,
+        'tag': type.isEmpty ? 'À la une' : type,
+        'is_active': true,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bannière ajoutée avec succès ! Rafraîchissement requis.'), backgroundColor: ThixPolicy.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de l\'upload : $e'), backgroundColor: ThixPolicy.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingBanner = false);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -139,7 +266,7 @@ class _HomePagePremiumState extends State<HomePagePremium> {
   Future<void> _openEmergency() async {
     final auth = context.read<AuthController>();
     if (auth.isAuthenticated) {
-      context.push('/thix-urgent');
+      context.push('/thix-retrouve');
       return;
     }
     if (!mounted) return;
@@ -170,7 +297,7 @@ class _HomePagePremiumState extends State<HomePagePremium> {
       context: context, 
       backgroundColor: Colors.transparent, 
       isScrollControlled: true, 
-      builder: (context) => const AccountRequestSheet() // L'erreur du builder est corrigée ici
+      builder: (context) => const AccountRequestSheet() 
     );
     
     switch (res) { 
@@ -220,7 +347,7 @@ class _HomePagePremiumState extends State<HomePagePremium> {
       case 'thixMoney': context.push(AppRoutes.thixMoney); break;
       case 'monPays': context.push(AppRoutes.monPays); break;
       case 'reservation': context.push(AppRoutes.reservation); break;
-      case 'thixUrgent': context.push(AppRoutes.thixUrgent); break;
+      case 'thixRetrouve': context.push(AppRoutes.thixRetrouve); break;
       default: break;
     }
   }
@@ -249,14 +376,11 @@ class _HomePagePremiumState extends State<HomePagePremium> {
       backgroundColor: ThixPolicy.surface,
       body: Stack(
         children: [
-          // 1. FOND DE PAGE
           const HomeSoftBackground(),
           
-          // 2. CONTENU SCROLLABLE
           CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              // HEADER PERSISTANT
               SliverPersistentHeader(
                 pinned: true,
                 delegate: HomeHeaderDelegate(
@@ -272,7 +396,6 @@ class _HomePagePremiumState extends State<HomePagePremium> {
               
               const SliverToBoxAdapter(child: SizedBox(height: ThixPolicy.s12)),
               
-              // BARRE DE RECHERCHE THIX ID
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s20),
@@ -286,22 +409,57 @@ class _HomePagePremiumState extends State<HomePagePremium> {
               
               const SliverToBoxAdapter(child: SizedBox(height: ThixPolicy.s12)),
               
-              // ACTUALITÉS / HEADLINES
+              // ✅ CARROUSEL AVEC BOUTON ADMIN SUPERPOSÉ
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s20),
-                  child: HomeHeadlinesCarousel(
-                    controller: _headlinesController,
-                    uid: auth.currentUser?.id,
-                    onThixInfoTap: () => context.push(AppRoutes.thixInfo),
-                    onOpportunityTap: () => context.push(AppRoutes.opportunities),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      HomeHeadlinesCarousel(
+                        controller: _headlinesController,
+                        uid: auth.currentUser?.id,
+                        onThixInfoTap: () => context.push(AppRoutes.thixInfo),
+                        onOpportunityTap: () => context.push(AppRoutes.opportunities),
+                      ),
+                      
+                      // Affichage du bouton de configuration uniquement pour les admins
+                      if (_isAdmin)
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: GestureDetector(
+                            onTap: _uploadingBanner ? null : _showAddBannerDialog,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.15),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: _uploadingBanner
+                                  ? const SizedBox(
+                                      width: 20, 
+                                      height: 20, 
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: ThixPolicy.primary)
+                                    )
+                                  : const Icon(Icons.add_a_photo_rounded, size: 20, color: ThixPolicy.primary),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
               
               const SliverToBoxAdapter(child: SizedBox(height: ThixPolicy.s12)),
               
-              // ACTIONS RAPIDES
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s20),
@@ -316,7 +474,6 @@ class _HomePagePremiumState extends State<HomePagePremium> {
               
               const SliverToBoxAdapter(child: SizedBox(height: ThixPolicy.s8)),
               
-              // CONSTELLATION DES SERVICES
               SliverToBoxAdapter(
                 child: StreamBuilder<SectionBadgeCounts>(
                   stream: badgeCountsStream,
@@ -337,7 +494,6 @@ class _HomePagePremiumState extends State<HomePagePremium> {
               
               const SliverToBoxAdapter(child: SizedBox(height: ThixPolicy.s8)),
               
-              // CARTE PREMIUM / TRUST SCORE
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: ThixPolicy.s20),
@@ -347,7 +503,6 @@ class _HomePagePremiumState extends State<HomePagePremium> {
               
               const SliverToBoxAdapter(child: SizedBox(height: ThixPolicy.s12)),
               
-              // SECTION PERSONNALISÉE
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: ThixPolicy.s20),
@@ -359,7 +514,6 @@ class _HomePagePremiumState extends State<HomePagePremium> {
             ],
           ),
           
-          // 3. OVERLAY DE CHARGEMENT
           if (_searching)
             Positioned.fill(
               child: Container(

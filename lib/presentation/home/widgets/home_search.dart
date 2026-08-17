@@ -1,6 +1,6 @@
 // lib/presentation/home/widgets/home_search.dart
 import 'package:flutter/material.dart';
-import 'package:thix_id/l10n/app_localizations.dart';
+import 'package:go_router/go_router.dart'; 
 import 'package:thix_id/core/theme/thix_design_policy.dart';
 
 class HomeSearch extends StatelessWidget {
@@ -17,10 +17,8 @@ class HomeSearch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    
     return Container(
-      height: ThixPolicy.searchBarHeight, // Utilise la policy ! (48)
+      height: ThixPolicy.searchBarHeight, 
       padding: const EdgeInsets.only(left: ThixPolicy.s16, right: ThixPolicy.s6),
       decoration: BoxDecoration(
         color: ThixPolicy.card,
@@ -38,36 +36,61 @@ class HomeSearch extends StatelessWidget {
               enabled: !isSearching,
               textAlignVertical: TextAlignVertical.center,
               style: ThixPolicy.bodyMediumStyle,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 fillColor: Colors.transparent,
                 filled: false,
-                hintText: 'THIX ID...',
-                hintStyle: ThixPolicy.bodySmallStyle,
+                // 🌟 NOUVEAU : Texte incluant les deux services
+                hintText: 'Saisir un THIX ID ou Scanner...',
+                hintStyle: TextStyle(color: ThixPolicy.textSecondary, fontSize: 13),
                 contentPadding: EdgeInsets.zero,
               ),
+            ),
+          ),
+
+          // 🌟 BOUTON 1 : Scanner QR Code (Parrainage)
+          GestureDetector(
+            onTap: () {
+              // 🌟 CORRECTION DE LA ROUTE : Chemin direct vers le scanner
+              context.push('/scanner_activation'); 
+            },
+            child: Container(
+              height: 34,
+              width: 34,
+              decoration: BoxDecoration(
+                color: ThixPolicy.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: ThixPolicy.border),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.qr_code_scanner_rounded, color: ThixPolicy.textMain, size: 18),
             ),
           ),
           
           const SizedBox(width: ThixPolicy.s8),
           
+          // 🌟 BOUTON 2 : Vérifier (Même design que le QR Code)
           GestureDetector(
             onTap: isSearching ? null : onVerify,
             child: Container(
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s16),
+              height: 34,
+              width: 34,
               decoration: BoxDecoration(
-                gradient: ThixPolicy.brandGradient,
-                borderRadius: BorderRadius.circular(ThixPolicy.rMd),
+                color: ThixPolicy.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: ThixPolicy.border),
               ),
               alignment: Alignment.center,
-              child: Text(
-                l10n.t('home_verify_btn'),
-                style: const TextStyle(color: ThixPolicy.onBrand, fontWeight: ThixPolicy.bold, fontSize: 12),
-              ),
+              child: isSearching
+                  ? const SizedBox(
+                      width: 14, 
+                      height: 14, 
+                      child: CircularProgressIndicator(strokeWidth: 2, color: ThixPolicy.textMain)
+                    )
+                  : const Icon(Icons.person_search_rounded, color: ThixPolicy.textMain, size: 18),
             ),
           ),
         ],

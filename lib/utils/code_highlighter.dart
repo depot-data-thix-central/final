@@ -1,7 +1,5 @@
 // lib/utils/code_highlighter.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_highlight/flutter_highlight.dart';
-import 'package:flutter_highlight/themes/monokai-sublime.dart';
 
 /// Coloration syntaxique pour les snippets de code
 class CodeHighlighter {

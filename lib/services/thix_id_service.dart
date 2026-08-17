@@ -1,5 +1,5 @@
+// lib/services/thix_id_service.dart
 import 'dart:math';
-import 'dart:ui';
 
 /// THIX ID generation + validation utilities.
 ///
@@ -22,9 +22,6 @@ class ThixIdService {
   
   /// Alphabet pour les lettres
   static const String _letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  
-  /// Alphabet pour les tokens (exclut O, I, 0, 1 pour éviter confusions)
-  static const String _tokenAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   
   /// Générateur aléatoire sécurisé
   static final Random _rnd = Random.secure();
@@ -51,7 +48,7 @@ class ThixIdService {
       List.generate(3, (_) => _letters.codeUnitAt(_rnd.nextInt(_letters.length)))
     );
     
-    final body = 'THIX-${_fixedCountryCode}-$mmyy-$random5-$code3';
+    final body = 'THIX-$_fixedCountryCode-$mmyy-$random5-$code3';
     final checksum = _checksumDigit(body);
     return '$body-$checksum';
   }
@@ -72,7 +69,7 @@ class ThixIdService {
     );
     
     final prefixPart = (prefix != null && prefix.isNotEmpty) ? '-$prefix' : '';
-    final body = 'THIX-${_fixedCountryCode}$prefixPart-$mmyy-$random5-$code3';
+    final body = 'THIX-$_fixedCountryCode$prefixPart-$mmyy-$random5-$code3';
     final checksum = _checksumDigit(body);
     return '$body-$checksum';
   }

@@ -18,6 +18,12 @@ import 'dashboard_ui.dart';
 import 'dashboard_tabs.dart';
 import 'dashboard_editors.dart';
 
+// ✅ IMPORT DU BADGE DE CERTIFICATION
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+
+// ✅ IMPORT PANEL ADMIN — accès réservé role = 'admin'
+import 'package:thix_id/presentation/admin/admin_enterprise_certifications_page.dart';
+
 // =============================================================================
 // STATE MANAGEMENT
 // =============================================================================
@@ -45,6 +51,9 @@ class UserDashboardCtrl extends ChangeNotifier {
   AppUser? mergedUser;
   int score = 0;
 
+  // ✅ Rôle admin — vérifié côté serveur, jamais déduit côté client
+  bool isAdmin = false;
+
   UserDashboardCtrl({
     required this.profileService,
     required this.userService,
@@ -62,6 +71,7 @@ class UserDashboardCtrl extends ChangeNotifier {
     unawaited(
       profileService.ensureProfileExists(user: authUser).catchError((_) {}),
     );
+    unawaited(_loadAdminStatus(authUser.id));
 
     if (!DashboardCache().isStale && DashboardCache().lastProfile != null) {
       profile = DashboardCache().lastProfile;
@@ -94,6 +104,24 @@ class UserDashboardCtrl extends ChangeNotifier {
     } finally {
       loading = false;
       notifyListeners();
+    }
+  }
+
+  /// Lecture directe du rôle en base — jamais mise en cache localement,
+  /// pour éviter qu'un ancien statut admin persiste après révocation.
+  Future<void> _loadAdminStatus(String uid) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', uid)
+          .maybeSingle();
+      final role = row?['role']?.toString();
+      isAdmin = role == 'admin';
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Admin status check error: $e');
+      isAdmin = false;
     }
   }
 
@@ -200,6 +228,14 @@ class _ThixUserDashboardPageState extends State<ThixUserDashboardPage> {
     if (mounted) context.go(AppRoutes.home);
   }
 
+  void _openAdminPanel() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const AdminEnterpriseCertificationsPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final me = context.watch<AuthController>().currentUser;
@@ -274,9 +310,11 @@ class _ThixUserDashboardPageState extends State<ThixUserDashboardPage> {
                                   '')
                               .toString(),
                           score: score,
+                          isAdmin: ctrl.isAdmin,
                           onBack: () => context.go(AppRoutes.home),
                           onSettings: () => context.push(AppRoutes.settings),
                           onLogout: _logout,
+                          onAdminPanel: _openAdminPanel,
                           onEditProfile: () async {
                             await ProfileEditorSheet.show(
                               context,
@@ -384,10 +422,12 @@ class _CompactCoverHeader extends StatelessWidget {
   final String country;
   final String profession;
   final int score;
+  final bool isAdmin;
   final VoidCallback onBack;
   final VoidCallback onSettings;
   final Future<void> Function() onLogout;
   final VoidCallback onEditProfile;
+  final VoidCallback onAdminPanel;
 
   const _CompactCoverHeader({
     required this.coverUrl,
@@ -398,10 +438,12 @@ class _CompactCoverHeader extends StatelessWidget {
     required this.country,
     required this.profession,
     required this.score,
+    required this.isAdmin,
     required this.onBack,
     required this.onSettings,
     required this.onLogout,
     required this.onEditProfile,
+    required this.onAdminPanel,
   });
 
   bool get _hasCover => coverUrl.isNotEmpty;
@@ -444,7 +486,7 @@ class _CompactCoverHeader extends StatelessWidget {
                 ),
               ),
 
-              // Boutons : retour | déconnexion | settings
+              // Boutons : retour | [admin] | déconnexion | settings
               Positioned(
                 top: topPad + 8,
                 left: 12,
@@ -456,6 +498,14 @@ class _CompactCoverHeader extends StatelessWidget {
                       onTap: onBack,
                     ),
                     const Spacer(),
+                    // ✅ Visible uniquement si role = 'admin' (vérifié côté serveur)
+                    if (isAdmin) ...[
+                      _RoundIconBtn(
+                        icon: Icons.admin_panel_settings_rounded,
+                        onTap: onAdminPanel,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     // ❌ Chat retiré → Déconnexion
                     _RoundIconBtn(
                       icon: Icons.logout_rounded,
@@ -538,17 +588,30 @@ class _CompactCoverHeader extends StatelessWidget {
 
                 const SizedBox(height: 8),
 
-                // Nom
-                Text(
-                  displayName.isEmpty ? 'Utilisateur' : displayName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: Color(0xFF0A1E8A),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
+                // ✅ NOM DE L'UTILISATEUR + BADGE CERTIFICATION THIX
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        displayName.isEmpty ? 'Utilisateur' : displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18, // Légèrement agrandi pour le dashboard
+                          color: Color(0xFF0A1E8A),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    // Sceau de certification (récupère automatiquement via Riverpod pour l'utilisateur courant)
+                    const CertificationNameBadge(
+                      showLabel: false, // Sceau seul
+                      iconSize: 20, // Plus grand sur le propre profil
+                      padding: EdgeInsets.only(left: 6),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 2),

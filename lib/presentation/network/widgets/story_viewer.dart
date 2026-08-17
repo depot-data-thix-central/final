@@ -2,9 +2,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../models/network_story.dart';
+
+// ✅ CERTIFICATION & SYNCHRO PROFIL
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
 
 class StoryViewer extends StatefulWidget {
   final List<NetworkStory> stories;
@@ -204,7 +210,8 @@ class _StoryViewerState extends State<StoryViewer> {
                 if (url.isNotEmpty)
                   Image.network(
                     url,
-                    fit: BoxFit.cover,
+                    // ✅ MODIFICATION ICI : contain au lieu de cover pour éviter le "zoom/crop"
+                    fit: BoxFit.contain, 
                     loadingBuilder: (_, child, progress) {
                       if (progress == null) return child;
                       return Container(
@@ -339,7 +346,7 @@ class _StoryViewerState extends State<StoryViewer> {
                   ),
                 ),
 
-                // Header
+                // Header avec Certification
                 Positioned(
                   top: 18,
                   left: 12,
@@ -361,18 +368,58 @@ class _StoryViewerState extends State<StoryViewer> {
                               : null,
                         ),
                         const SizedBox(width: 10),
+                        
+                        // ✅ Consumer ajouté pour interroger le provider et afficher la certification
                         Expanded(
-                          child: Text(
-                            s.userName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: Consumer(
+                            builder: (context, ref, _) {
+                              final authorProfile = ref.watch(userProfileProvider(s.userId)).valueOrNull;
+                              
+                              CertificationTier? tier;
+                              CertificationStatus? status;
+                              bool isCertified = false;
+                              bool isLegacyVerified = false;
+
+                              if (authorProfile != null) {
+                                tier = CertificationTierX.parse(authorProfile['certification_tier']);
+                                status = CertificationStatusX.parse(authorProfile['certification_status']);
+                                isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+                                isLegacyVerified = authorProfile['is_verified'] == true;
+                              }
+
+                              return Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      s.userName,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (isCertified)
+                                    CertificationNameBadge(
+                                      tier: tier,
+                                      status: status,
+                                      showLabel: false,
+                                      iconSize: 14,
+                                      padding: const EdgeInsets.only(left: 4),
+                                    )
+                                  else if (isLegacyVerified)
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 14),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
                         ),
+                        
                         if (isMyStory)
                           IconButton(
                             style: IconButton.styleFrom(

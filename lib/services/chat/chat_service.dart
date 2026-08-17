@@ -37,6 +37,21 @@ class ChatService {
     return 'Utilisateur inconnu';
   }
 
+  Future<void> _assertParticipant(String conversationId) async {
+    if (currentUserId.isEmpty) {
+      throw Exception('Non authentifié');
+    }
+    final row = await _supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', conversationId)
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+    if (row == null) {
+      throw Exception('Accès refusé à cette conversation');
+    }
+  }
+
   // ============================================================
   // PRÉSENCE
   // ============================================================
@@ -65,8 +80,8 @@ class ChatService {
         'user_id': uid,
         'status': status,
         'custom_status': customStatus,
-        'last_seen_at': DateTime.now().toUtc().toIso8601String(), // 🌟 UTC FIX
-        'updated_at': DateTime.now().toUtc().toIso8601String(),   // 🌟 UTC FIX
+        'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
     } catch (e) {
       debugPrint('❌ updatePresence: $e');
@@ -104,7 +119,7 @@ class ChatService {
   Future<List<ChatConversation>> getConversations({
     int limit = 20,
     int offset = 0,
-    String filter = 'all', 
+    String filter = 'all',
   }) async {
     try {
       if (currentUserId.isEmpty) return [];
@@ -125,11 +140,12 @@ class ChatService {
       List<ChatConversation> conversations = data.map((row) {
         final map = Map<String, dynamic>.from(row as Map);
 
+        // ── Last message + 3 lights ──
         ChatMessage? lastMessage;
         final preview = map['last_message_preview'] as String?;
         if (preview != null && preview.isNotEmpty) {
           lastMessage = ChatMessage(
-            id: '',
+            id: map['last_message_id']?.toString() ?? '',
             conversationId: map['id']?.toString() ?? '',
             senderId: map['last_message_sender_id']?.toString() ?? '',
             senderName: '',
@@ -137,12 +153,19 @@ class ChatService {
             createdAt: map['last_message_at'] != null
                 ? DateTime.parse(map['last_message_at'].toString())
                 : DateTime.now().toUtc(),
+            isDelivered: map['last_message_is_delivered'] == true,
+            isRead: map['last_message_is_read'] == true,
           );
         }
 
+        // ── Escalade ──
+        final isEscalation = map['is_escalation'] == true ||
+            map['is_escalated'] == true ||
+            map['escalation_status']?.toString() == 'escalated';
+
         return ChatConversation(
           id: map['id']?.toString() ?? '',
-          isGroup: map['is_group'] ?? false,
+          isGroup: map['is_group'] == true,
           groupName: map['group_name'] as String?,
           groupAvatar: map['group_avatar'] as String?,
           participantIds: (map['participant_ids'] as List?)
@@ -157,10 +180,22 @@ class ChatService {
           updatedAt: map['updated_at'] != null
               ? DateTime.parse(map['updated_at'].toString())
               : DateTime.now().toUtc(),
-          isPinned: map['is_pinned'] ?? false,
+          isPinned: map['is_pinned'] == true,
+          isEscalation: isEscalation,
+          clientName: map['client_display_name'] as String? ??
+              map['client_name'] as String?,
+          clientAvatar: map['client_avatar_url'] as String? ??
+              map['client_avatar'] as String?,
+          escalatedByName: map['escalated_by_name'] as String? ??
+              map['agent_display_name'] as String? ??
+              map['from_agent_name'] as String?,
+          agentAvatar: map['agent_avatar_url'] as String? ??
+              map['escalated_by_avatar'] as String? ??
+              map['agent_avatar'] as String?,
         );
       }).toList();
-      
+
+      // ── Correction profils (sans perdre l'escalade) ──
       final otherUserIds = <String>{};
       for (final conv in conversations) {
         if (!conv.isGroup) {
@@ -168,9 +203,7 @@ class ChatService {
             (id) => id != currentUserId,
             orElse: () => '',
           );
-          if (otherId.isNotEmpty) {
-            otherUserIds.add(otherId);
-          }
+          if (otherId.isNotEmpty) otherUserIds.add(otherId);
         }
       }
 
@@ -192,7 +225,7 @@ class ChatService {
                 orElse: () => '',
               );
               final correctProfile = profilesMap[otherId];
-              
+
               if (correctProfile != null) {
                 return ChatConversation(
                   id: conv.id,
@@ -200,12 +233,19 @@ class ChatService {
                   groupName: conv.groupName,
                   groupAvatar: conv.groupAvatar,
                   participantIds: conv.participantIds,
-                  otherParticipantName: _resolveDisplayName(correctProfile), 
-                  otherParticipantAvatar: correctProfile['avatar_url'] as String?, 
+                  otherParticipantName: _resolveDisplayName(correctProfile),
+                  otherParticipantAvatar:
+                      correctProfile['avatar_url'] as String?,
                   lastMessage: conv.lastMessage,
                   unreadCount: conv.unreadCount,
                   updatedAt: conv.updatedAt,
                   isPinned: conv.isPinned,
+                  // ✅ conserver escalade
+                  isEscalation: conv.isEscalation,
+                  clientName: conv.clientName,
+                  clientAvatar: conv.clientAvatar,
+                  escalatedByName: conv.escalatedByName,
+                  agentAvatar: conv.agentAvatar,
                 );
               }
             }
@@ -286,6 +326,10 @@ class ChatService {
         otherAvatar = profile?['avatar_url'] as String?;
       }
 
+      final isEscalation = response['is_escalated'] == true ||
+          response['is_escalation'] == true ||
+          response['escalation_status']?.toString() == 'escalated';
+
       return ChatConversation(
         id: response['id'].toString(),
         isGroup: response['is_group'] ?? false,
@@ -297,6 +341,14 @@ class ChatService {
         unreadCount: 0,
         updatedAt: DateTime.parse(response['updated_at'].toString()),
         isPinned: response['is_pinned'] ?? false,
+        isEscalation: isEscalation,
+        clientName: response['client_display_name'] as String? ??
+            response['client_name'] as String?,
+        clientAvatar: response['client_avatar_url'] as String? ??
+            response['client_avatar'] as String?,
+        escalatedByName: response['escalated_by_name'] as String? ??
+            response['from_agent_name'] as String?,
+        agentAvatar: response['agent_avatar_url'] as String?,
       );
     } catch (e) {
       debugPrint('❌ getConversation: $e');
@@ -308,6 +360,31 @@ class ChatService {
   // CRÉATION DE CONVERSATIONS
   // ============================================================
 
+  Future<ChatConversation> createDirectConversation(String otherUserId) async {
+    if (currentUserId.isEmpty) throw Exception('Not logged in');
+    if (otherUserId.isEmpty || otherUserId == currentUserId) {
+      throw Exception('Cible invalide');
+    }
+
+    final convId = await _supabase.rpc(
+      'create_direct_conversation',
+      params: {'p_other_user_id': otherUserId},
+    );
+
+    final id = convId?.toString();
+    if (id == null || id.isEmpty) {
+      throw Exception('Impossible de créer la conversation');
+    }
+
+    return (await getConversation(id)) ??
+        ChatConversation(
+          id: id,
+          isGroup: false,
+          participantIds: [currentUserId, otherUserId],
+          updatedAt: DateTime.now().toUtc(),
+        );
+  }
+
   Future<ChatConversation> createConversation({
     required List<String> participantIds,
     bool isGroup = false,
@@ -318,7 +395,7 @@ class ChatService {
     if (uid.isEmpty) throw Exception('Not logged in');
 
     final conversationId = const Uuid().v4();
-    final now = DateTime.now().toUtc().toIso8601String(); // 🌟 UTC FIX
+    final now = DateTime.now().toUtc().toIso8601String();
 
     await _supabase.from('conversations').insert({
       'id': conversationId,
@@ -330,16 +407,13 @@ class ChatService {
     });
 
     final allParticipants = {...participantIds, uid};
-    await Future.wait(
-      allParticipants.map(
-        (pid) => _supabase.from('conversation_participants').insert({
-          'conversation_id': conversationId,
-          'user_id': pid,
-          'role': pid == uid ? 'admin' : 'member',
-          'last_read_at': now,
-        }),
-      ),
-    );
+
+    await _supabase.from('conversation_participants').insert({
+      'conversation_id': conversationId,
+      'user_id': uid,
+      'role': 'admin',
+      'last_read_at': now,
+    });
 
     return ChatConversation(
       id: conversationId,
@@ -397,6 +471,8 @@ class ChatService {
     int offset = 0,
   }) async {
     try {
+      await _assertParticipant(conversationId);
+
       final response = await _supabase
           .from('messages')
           .select('''
@@ -439,7 +515,8 @@ class ChatService {
     final uid = currentUserId;
     if (uid.isEmpty) throw Exception('Not logged in');
 
-    // 🌟 CORRECTION DU BUG DES 3 HEURES DE DÉCALAGE : ON FORCE UTC
+    await _assertParticipant(conversationId);
+
     final now = DateTime.now().toUtc();
     final deleteAt = isEphemeral && ephemeralDuration != null
         ? now.add(Duration(seconds: ephemeralDuration))
@@ -451,7 +528,7 @@ class ChatService {
           'conversation_id': conversationId,
           'sender_id': uid,
           'content': content,
-          'created_at': now.toIso8601String(), // 🌟 Toujours enregistré en UTC
+          'created_at': now.toIso8601String(),
           'media_url': mediaUrl,
           'media_type': mediaType,
           'media_name': mediaName,
@@ -459,7 +536,7 @@ class ChatService {
           'reply_to_id': replyToId,
           'is_ephemeral': isEphemeral,
           'ephemeral_duration': ephemeralDuration,
-          'delete_at': deleteAt?.toIso8601String(), // 🌟 Toujours enregistré en UTC
+          'delete_at': deleteAt?.toIso8601String(),
         })
         .select('*, profiles!sender_id(display_name, full_name, avatar_url)')
         .single();
@@ -472,11 +549,12 @@ class ChatService {
   }
 
   Future<void> updateMessage(String messageId, String newContent) async {
+    if (currentUserId.isEmpty) throw Exception('Not logged in');
     try {
       await _supabase.from('messages').update({
         'content': newContent,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', messageId);
+      }).eq('id', messageId).eq('sender_id', currentUserId);
     } catch (e) {
       debugPrint('❌ updateMessage: $e');
       rethrow;
@@ -529,6 +607,35 @@ class ChatService {
             value: conversationId,
           ),
           callback: (payload) async {
+            try {
+              final raw = payload.newRecord;
+              if (raw != null && raw.isNotEmpty) {
+                final map = Map<String, dynamic>.from(raw);
+
+                if (map['sender_id'] != null) {
+                  try {
+                    final p = await _supabase
+                        .from('profiles')
+                        .select('display_name, full_name, avatar_url')
+                        .eq('id', map['sender_id'])
+                        .maybeSingle();
+                    map['sender_name'] = _resolveDisplayName(p);
+                    map['sender_avatar'] = p?['avatar_url'];
+                  } catch (_) {
+                    map['sender_name'] ??= 'Utilisateur';
+                  }
+                }
+
+                final msg = ChatMessage.fromJson(map);
+                if (!controller.isClosed) {
+                  controller.add([msg]);
+                }
+                return;
+              }
+            } catch (e) {
+              debugPrint('⚠️ payload parse error: $e');
+            }
+
             final messages = await getMessages(conversationId);
             if (!controller.isClosed) {
               controller.add(messages);
@@ -546,7 +653,7 @@ class ChatService {
   }
 
   // ============================================================
-  // ALIAS + GROUPES + PRESENCE STREAM + DELETE + UPLOAD
+  // ALIAS + GROUPES + PRESENCE + DELETE + UPLOAD
   // ============================================================
 
   Future<void> markAsRead(String conversationId) {
@@ -618,11 +725,12 @@ class ChatService {
   }
 
   Future<void> deleteMessage(String messageId) async {
+    if (currentUserId.isEmpty) throw Exception('Not logged in');
     try {
       await _supabase.from('messages').update({
         'is_deleted': true,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', messageId);
+      }).eq('id', messageId).eq('sender_id', currentUserId);
     } catch (e) {
       debugPrint('❌ deleteMessage: $e');
       rethrow;

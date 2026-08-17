@@ -84,31 +84,55 @@ class NetworkPost {
     this.repostOfId,
   });
 
+  // ─── Logique de détection des médias améliorée ───
+
   static bool _hasExtension(String url, List<String> extensions) {
     final cleanUrl = url.split('?').first.split('#').first.toLowerCase();
     return extensions.any((ext) => cleanUrl.endsWith(ext));
   }
 
-  static bool _isImage(String url) => _hasExtension(url, ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
-  static bool _isVideo(String url) => _hasExtension(url, ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v']);
-  // 🌟 AJOUT : Détection des fichiers audio
-  static bool _isAudio(String url) => _hasExtension(url, ['.m4a', '.mp3', '.wav', '.aac', '.ogg', '.flac']); 
+  static bool _isImage(String url) {
+    if (_hasExtension(url, ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])) {
+      return true;
+    }
+    // Fallback de sécurité si l'URL cloud n'a pas d'extension
+    final cleanUrl = url.toLowerCase();
+    return cleanUrl.contains('/images/') || cleanUrl.contains('/image/');
+  }
+
+  static bool _isVideo(String url) {
+    if (_hasExtension(url, ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'])) {
+      return true;
+    }
+    // Fallback de sécurité pour les vidéos cloud
+    final cleanUrl = url.toLowerCase();
+    return cleanUrl.contains('/videos/') || cleanUrl.contains('/video/');
+  }
+
+  static bool _isAudio(String url) {
+    if (_hasExtension(url, ['.m4a', '.mp3', '.wav', '.aac', '.ogg', '.flac'])) {
+      return true;
+    }
+    // Fallback de sécurité pour les audios cloud
+    final cleanUrl = url.toLowerCase();
+    return cleanUrl.contains('/audios/') || cleanUrl.contains('/audio/');
+  }
+
+  // ─── Getters ───
 
   List<String> get imageUrls => mediaUrls.where(_isImage).toList();
   List<String> get videoUrls => mediaUrls.where(_isVideo).toList();
-  // 🌟 AJOUT : Liste des URLs audio
   List<String> get audioUrls => mediaUrls.where(_isAudio).toList(); 
 
   bool get hasImages => imageUrls.isNotEmpty;
   bool get hasVideos => videoUrls.isNotEmpty;
-  // 🌟 AJOUT : Vérification de la présence d'audio
   bool get hasAudio => audioUrls.isNotEmpty || postType == 'audio'; 
   bool get hasMedia => mediaUrls.isNotEmpty;
 
   bool get isRepostCard =>
       postType == 'repost' || (repostOfId != null && repostOfId!.isNotEmpty);
 
-  // ─── Factory depuis Supabase ───
+  // ─── Factory depuis la Base de Données ───
   factory NetworkPost.fromJson(Map<String, dynamic> json) {
     List<String> mediaUrls = [];
     if (json['media_urls'] != null) {
@@ -164,6 +188,7 @@ class NetworkPost {
     );
   }
 
+  // ─── Sérialisation JSON ───
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -198,6 +223,7 @@ class NetworkPost {
     };
   }
 
+  // ─── Copie de l'objet ───
   NetworkPost copyWith({
     String? id,
     String? userId,
@@ -262,6 +288,7 @@ class NetworkPost {
     );
   }
 
+  // ─── Formatage de la date ───
   String get formattedDate {
     final now = DateTime.now();
     final difference = now.difference(createdAt);

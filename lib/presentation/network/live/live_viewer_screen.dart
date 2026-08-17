@@ -46,6 +46,8 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
   bool _isVideoOff = false;
   bool _isRequesting = false;
   int _viewerCount = 0;
+  
+  String? _errorMessage; // ✅ AJOUT : Pour gérer l'erreur visuelle du spectateur
 
   final TextEditingController _chatController = TextEditingController();
   final List<Map<String, String>> _comments = [];
@@ -64,11 +66,20 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
 
   Future<void> _initAgora() async {
     try {
+      // ✅ APPEL DE LA FUNCTION SUPABASE
       final response = await Supabase.instance.client.functions.invoke(
-        'get-agora-token',
-        body: {'channelName': widget.channelName, 'uid': 0, 'isHost': false},
+        'agora-token',
+        body: {
+          'channel': widget.channelName,
+          'uid': 0,
+        },
       );
       final data = response.data as Map<String, dynamic>;
+
+      // ✅ VÉRIFICATION DU TOKEN
+      if (data['token'] == null || data['appId'] == null) {
+        throw Exception('Token Agora invalide: $data');
+      }
 
       _engine = createAgoraRtcEngine();
       await _engine.initialize(RtcEngineContext(
@@ -107,6 +118,18 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
       debugPrint('Erreur Agora Spectateur: $e');
+      if (mounted) {
+        // ✅ On enregistre l'erreur pour arrêter le chargement infini
+        setState(() => _errorMessage = e.toString()); 
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur Live : $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
     }
   }
 
@@ -229,7 +252,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
         resizeToAvoidBottomInset: true,
         body: Stack(
           children: [
-            // ✅ CORRECTION ICI : Gestion propre du flux vidéo et de l'attente de l'hôte
+            // ✅ CORRECTION ICI : Gestion de l'erreur vs Chargement infini
             Positioned.fill(
               child: _isInitialized
                   ? SizedBox.expand(
@@ -255,7 +278,7 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
                                       children: [
                                         CircularProgressIndicator(color: _C.primary),
                                         SizedBox(height: 16),
-                                        Text('Connexion au direct en cours...', style: TextStyle(color: _C.textMuted)),
+                                        Text('En attente de la vidéo de l\'hôte...', style: TextStyle(color: _C.textMuted)),
                                       ],
                                     ),
                                   ),
@@ -265,7 +288,25 @@ class _LiveViewerScreenState extends State<LiveViewerScreen> with TickerProvider
                     )
                   : Container(
                       color: _C.bgDark,
-                      child: const Center(child: CircularProgressIndicator(color: _C.primary)),
+                      child: Center(
+                        child: _errorMessage != null
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Text(
+                                  "Impossible de rejoindre le direct :\n$_errorMessage",
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: _C.red, fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                              )
+                            : const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(color: _C.primary),
+                                  SizedBox(height: 16),
+                                  Text("Connexion en cours...", style: TextStyle(color: _C.textMuted)),
+                                ],
+                              ),
+                      ),
                     ),
             ),
 

@@ -16,6 +16,11 @@ import 'package:thix_id/features/network/data/network_service_provider.dart';
 // ✅ DESIGN SYSTEM THIX
 import 'package:thix_id/core/theme/thix_design_policy.dart';
 
+// ✅ CERTIFICATION & SYNCHRO PROFIL
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
+
 // ─── HELPER POUR FORMATER LES COMPTEURS ───
 String _formatCountHelper(int count) {
   if (count >= 1000000) {
@@ -25,7 +30,7 @@ String _formatCountHelper(int count) {
   return '$count';
 }
 
-// ─── HELPER : DÉTECTION VIDÉO PAR EXTENSION ───
+// ─── HELPER : DÉTECTION VIDÉO PAR EXTENSION ET MOT-CLÉ ───
 bool _isVideoUrl(String url) {
   final lower = url.toLowerCase();
   return lower.contains('.mp4') ||
@@ -33,7 +38,9 @@ bool _isVideoUrl(String url) {
       lower.contains('.m4v') ||
       lower.contains('.webm') ||
       lower.contains('.avi') ||
-      lower.contains('.mkv');
+      lower.contains('.mkv') ||
+      lower.contains('/videos/') ||
+      lower.contains('/video/');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -201,7 +208,6 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
 
   void _cacheParsedContent() {
     final content = widget.post.content;
-
     final baseStyle = ThixPolicy.bodyStyle.copyWith(height: 1.48);
 
     _cachedFullSpans = _parseContent(content, baseStyle, 0);
@@ -586,7 +592,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
     );
   }
 
-  // ── FACT-CHECK IA — repositionné en bas de carte, design amélioré ──
+  // ── FACT-CHECK IA ──
   Widget _buildFactCheckBanner(bool isMisinformation, String? message) {
     if (!isMisinformation || message == null || message.isEmpty) return const SizedBox.shrink();
     return Container(
@@ -657,6 +663,34 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
           final likesCount = ref.watch(postItemProvider.select((p) => p.likesCount));
           final isOwner = widget.currentProfileId == post.userId;
 
+          // 1. Récupération des données du profil de l'auteur
+          final authorProfile = ref.watch(userProfileProvider(post.userId)).valueOrNull;
+          
+          CertificationTier? tier;
+          CertificationStatus? status;
+          bool isCertified = false;
+          bool isLegacyVerified = false;
+
+          if (authorProfile != null) {
+            tier = CertificationTierX.parse(authorProfile['certification_tier']);
+            status = CertificationStatusX.parse(authorProfile['certification_status']);
+            isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+            isLegacyVerified = authorProfile['is_verified'] == true;
+          }
+
+          // 2. Récupération des données du profil de l'utilisateur COURANT (pour bloquer "Modifier")
+          final currentUserProfile = ref.watch(userProfileProvider(widget.currentProfileId)).valueOrNull;
+          bool isCurrentUserFree = true; // Gratuit par défaut
+          
+          if (currentUserProfile != null) {
+            final currentTierStr = (currentUserProfile['certification_tier']?.toString().toLowerCase()) ?? 'gratuit';
+            isCurrentUserFree = currentTierStr == 'gratuit' || currentTierStr == 'none';
+          }
+
+          // Détermination du statut de Follow
+          final isFollowingDB = ref.watch(followStatusProvider(post.userId)).valueOrNull;
+          final isFollowing = isFollowingDB ?? _isFollowingLocal;
+
           return Container(
             decoration: BoxDecoration(
               color: ThixPolicy.card,
@@ -696,7 +730,8 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                                         : null,
                                   ),
                                 ),
-                                if (!isOwner && !_isFollowingLocal)
+                                // Bouton "+" : Synchro parfaite
+                                if (!isOwner && !isFollowing)
                                   Positioned(
                                     bottom: -2, right: -2,
                                     child: GestureDetector(
@@ -705,7 +740,17 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                                         setState(() => _followBusy = true);
                                         HapticFeedback.selectionClick();
                                         setState(() => _isFollowingLocal = true);
-                                        try { widget.onFollow?.call(); } catch (_) { if (mounted) setState(() => _isFollowingLocal = false); } finally { if (mounted) setState(() => _followBusy = false); }
+                                        
+                                        try {
+                                          await ref.read(networkServiceProvider).followUser(post.userId);
+                                          ref.invalidate(followStatusProvider(post.userId));
+                                          ref.invalidate(userProfileProvider(post.userId));
+                                          widget.onFollow?.call();
+                                        } catch (_) {
+                                          if (mounted) setState(() => _isFollowingLocal = false);
+                                        } finally {
+                                          if (mounted) setState(() => _followBusy = false);
+                                        }
                                       },
                                       child: Container(
                                         width: 20, height: 20,
@@ -724,7 +769,35 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(post.authorName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: ThixPolicy.textMain), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          post.authorName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                            color: ThixPolicy.textMain,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isCertified)
+                                        CertificationNameBadge(
+                                          tier: tier,
+                                          status: status,
+                                          showLabel: false,
+                                          iconSize: 16,
+                                          padding: const EdgeInsets.only(left: 5),
+                                        )
+                                      else if (isLegacyVerified)
+                                        const Padding(
+                                          padding: EdgeInsets.only(left: 4),
+                                          child: Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 15),
+                                        ),
+                                    ],
+                                  ),
                                   if (post.authorTitle != null && post.authorTitle!.isNotEmpty)
                                     Text(post.authorTitle!, style: const TextStyle(fontSize: 10.5, color: ThixPolicy.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
                                   Text(_getTimeAgo(post.createdAt), style: const TextStyle(fontSize: 10, color: ThixPolicy.textSecondary, fontWeight: FontWeight.w600)),
@@ -812,7 +885,10 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                               }
                             },
                             itemBuilder: (_) => [
-                              if (isOwner) const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Modifier')])),
+                              // ✅ MASQUER L'OPTION 'MODIFIER' POUR LES COMPTES GRATUITS
+                              if (isOwner && !isCurrentUserFree) 
+                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Modifier')])),
+                              
                               if (isOwner) const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline_rounded, size: 18, color: ThixPolicy.danger), SizedBox(width: 10), Text('Supprimer', style: TextStyle(color: ThixPolicy.danger))])),
                               const PopupMenuItem(value: 'save', child: Row(children: [Icon(Icons.bookmark_border_rounded, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Sauvegarder')])),
                               const PopupMenuItem(value: 'repost', child: Row(children: [Icon(Icons.repeat_rounded, size: 18, color: ThixPolicy.textMain), SizedBox(width: 10), Text('Reposter')])),
@@ -836,7 +912,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                           ),
                         ),
 
-                      // ─── TEXTE (toujours affiché si présent) ───
+                      // ─── TEXTE ───
                       _buildPostContent(post),
 
                       if (post.isRepostCard && post.repostOfId != null && post.repostOfId!.isNotEmpty) ...[
@@ -844,13 +920,13 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                         _OriginalPostEmbed(postId: post.repostOfId!),
                       ],
 
-                      // ─── MÉDIAS MIXTES : photos + vidéos ensemble ───
-                      if (!post.isRepostCard && post.imageUrls.isNotEmpty) ...[
+                      // ─── MÉDIAS MIXTES ───
+                      if (!post.isRepostCard && (post.hasImages || post.hasVideos)) ...[
                         const SizedBox(height: 10),
-                        _buildMediaGrid(post.imageUrls),
+                        _buildMediaGrid([...post.imageUrls, ...post.videoUrls]),
                       ],
 
-                      // ─── AUDIO — peut coexister avec texte/photos ───
+                      // ─── AUDIO ───
                       if (post.hasAudio && post.audioUrls.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         _ThixWaveformAudioPlayer(audioUrl: post.audioUrls.first),
@@ -865,7 +941,7 @@ class _PostCardState extends ConsumerState<PostCard> with AutomaticKeepAliveClie
                         _buildChallengeWidget(post),
                       ],
 
-                      // ─── FACT-CHECK — désormais en bas, juste avant les actions ───
+                      // ─── FACT-CHECK ───
                       _buildFactCheckBanner(post.isMisinformation, post.factCheckMessage),
 
                       const SizedBox(height: ThixPolicy.s12),
@@ -970,6 +1046,22 @@ class _OriginalPostEmbed extends ConsumerWidget {
           );
         }
 
+        final originalAuthorProfile = ref.watch(userProfileProvider(original.userId)).valueOrNull;
+        
+        CertificationTier? originalTier;
+        CertificationStatus? originalStatus;
+        bool originalIsCertified = false;
+        bool originalIsLegacyVerified = false;
+
+        if (originalAuthorProfile != null) {
+          originalTier = CertificationTierX.parse(originalAuthorProfile['certification_tier']);
+          originalStatus = CertificationStatusX.parse(originalAuthorProfile['certification_status']);
+          originalIsCertified = originalStatus == CertificationStatus.approved || originalStatus == CertificationStatus.generated;
+          originalIsLegacyVerified = originalAuthorProfile['is_verified'] == true;
+        }
+
+        final originalMedia = [...original.imageUrls, ...original.videoUrls];
+
         return Container(
           decoration: BoxDecoration(color: ThixPolicy.surfaceSoft, borderRadius: BorderRadius.circular(ThixPolicy.rLg), border: Border.all(color: ThixPolicy.border)),
           clipBehavior: Clip.antiAlias,
@@ -990,7 +1082,33 @@ class _OriginalPostEmbed extends ConsumerWidget {
                           child: original.authorAvatar == null || original.authorAvatar!.isEmpty ? const Icon(Icons.person, size: 16, color: ThixPolicy.primaryDeep) : null,
                         ),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(original.authorName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: ThixPolicy.textMain), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  original.authorName, 
+                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: ThixPolicy.textMain), 
+                                  maxLines: 1, 
+                                  overflow: TextOverflow.ellipsis
+                                ),
+                              ),
+                              if (originalIsCertified)
+                                CertificationNameBadge(
+                                  tier: originalTier, 
+                                  status: originalStatus, 
+                                  showLabel: false,
+                                  iconSize: 14, 
+                                  padding: const EdgeInsets.only(left: 4)
+                                )
+                              else if (originalIsLegacyVerified)
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 4), 
+                                  child: Icon(Icons.verified_rounded, color: ThixPolicy.gold, size: 14)
+                                ),
+                            ],
+                          ),
+                        ),
                         Text(timeago.format(original.createdAt.toLocal(), locale: 'fr'), style: const TextStyle(fontSize: 10, color: ThixPolicy.textSecondary)),
                       ],
                     ),
@@ -998,14 +1116,14 @@ class _OriginalPostEmbed extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(original.content, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, height: 1.35, color: ThixPolicy.textMain)),
                     ],
-                    if (original.imageUrls.isNotEmpty) ...[
+                    if (originalMedia.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(ThixPolicy.rMd),
-                        child: _isVideoUrl(original.imageUrls.first)
-                            ? _VideoThumbTile(videoUrl: original.imageUrls.first, height: 140, onTap: () {})
+                        child: _isVideoUrl(originalMedia.first)
+                            ? _VideoThumbTile(videoUrl: originalMedia.first, height: 140, onTap: () {})
                             : CachedNetworkImage(
-                                imageUrl: original.imageUrls.first, height: 140, width: double.infinity, fit: BoxFit.cover,
+                                imageUrl: originalMedia.first, height: 140, width: double.infinity, fit: BoxFit.cover,
                                 errorWidget: (_, __, ___) => const SizedBox.shrink(),
                               ),
                       ),
@@ -1099,9 +1217,7 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TUILE VIDÉO (dans la grille de médias) — thumbnail + play, corrige
-// l'ancien bug où les URLs vidéo étaient traitées comme des images
-// (affichage d'une icône "image cassée").
+// TUILE VIDÉO
 // ─────────────────────────────────────────────────────────────
 class _VideoThumbTile extends StatefulWidget {
   final String videoUrl;
@@ -1229,8 +1345,7 @@ class _FullScreenVideoPlayerState extends State<_FullScreenVideoPlayer> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// LECTEUR AUDIO — refonte : monochrome (sans or), plus grand,
-// ondulation plus fine et plus fluide.
+// LECTEUR AUDIO 
 // ─────────────────────────────────────────────────────────────
 class _ThixWaveformAudioPlayer extends StatefulWidget {
   final String audioUrl;
@@ -1244,8 +1359,6 @@ class _ThixWaveformAudioPlayerState extends State<_ThixWaveformAudioPlayer> {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
-  // Motif d'ondulation plus naturel — davantage de points, variation plus
-  // douce pour un rendu "waveform" fluide plutôt que des barres aléatoires.
   static final List<double> _wavePattern = List.generate(48, (i) {
     final base = 0.35 + 0.55 * (0.5 + 0.5 * _sinApprox(i / 48 * 6.28));
     final micro = (i % 5 == 0) ? 0.12 : 0.0;
@@ -1253,12 +1366,10 @@ class _ThixWaveformAudioPlayerState extends State<_ThixWaveformAudioPlayer> {
   });
 
   static double _sinApprox(double x) {
-    // approximation simple sans dart:math import supplémentaire nécessaire
     return _sin(x);
   }
 
   static double _sin(double x) {
-    // Taylor series basique — suffisant pour générer un motif visuel varié.
     final x2 = x * x;
     return x - (x * x2) / 6 + (x * x2 * x2) / 120 - (x * x2 * x2 * x2) / 5040;
   }
@@ -1298,7 +1409,7 @@ class _ThixWaveformAudioPlayerState extends State<_ThixWaveformAudioPlayer> {
             onTap: () { if (_isPlaying) _audioPlayer.pause(); else _audioPlayer.play(UrlSource(widget.audioUrl)); },
             child: Container(
               width: 52, height: 52,
-              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
               child: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: ThixPolicy.inkDeep, size: 28),
             ),
           ),

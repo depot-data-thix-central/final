@@ -8,7 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:thix_id/core/theme/thix_design_policy.dart';
+import '../../models/chat/chat_message.dart';
 import '../../models/chat/chat_conversation.dart';
 import 'providers/chat_list_provider.dart';
 import 'providers/presence_provider.dart';
@@ -20,6 +22,11 @@ import 'package:thix_id/features/auth/presentation/providers/auth_controller.dar
 import 'package:thix_id/presentation/chat/call/call_history_page.dart';
 import 'package:thix_id/presentation/chat/widgets/status_story_row.dart';
 import 'package:thix_id/presentation/chat/providers/status_provider.dart';
+
+// ✅ Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
 
 class ChatListPage extends ConsumerStatefulWidget {
   const ChatListPage({super.key});
@@ -40,7 +47,6 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
   void initState() {
     super.initState();
     _scroll.addListener(() {
-      // Pagination Scalable (déclenchée avant la fin du scroll)
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300) {
         ref.read(chatListProvider.notifier).loadMore();
       }
@@ -118,14 +124,24 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
                   ? ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s24, vertical: ThixPolicy.s12),
                       leading: Container(
-                        width: 48, height: 48,
-                        decoration: BoxDecoration(color: ThixPolicy.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(ThixPolicy.rMd)),
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: ThixPolicy.danger.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(ThixPolicy.rMd),
+                        ),
                         child: const Icon(Icons.swap_vert_rounded, color: ThixPolicy.danger, size: 24),
                       ),
                       title: const Text('Escalade(s) en attente', style: TextStyle(color: ThixPolicy.textMain, fontWeight: FontWeight.w700, fontSize: 15)),
-                      subtitle: const Padding(padding: EdgeInsets.only(top: 3), child: Text('Nécessite une action de votre part', style: TextStyle(color: ThixPolicy.textSecondary, fontSize: 13))),
+                      subtitle: const Padding(
+                        padding: EdgeInsets.only(top: 3),
+                        child: Text('Nécessite une action de votre part', style: TextStyle(color: ThixPolicy.textSecondary, fontSize: 13)),
+                      ),
                       trailing: const Icon(Icons.chevron_right_rounded, color: ThixPolicy.textSecondary),
-                      onTap: () { Navigator.pop(ctx); context.pushNamed('chatEscalationReceived'); },
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        context.pushNamed('chatEscalationReceived');
+                      },
                     )
                   : const Padding(
                       padding: EdgeInsets.symmetric(vertical: 48),
@@ -177,7 +193,10 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () { Navigator.pop(context); tap(); },
+        onTap: () {
+          Navigator.pop(context);
+          tap();
+        },
         borderRadius: BorderRadius.circular(ThixPolicy.rLg),
         child: Container(
           padding: const EdgeInsets.all(ThixPolicy.s16),
@@ -189,8 +208,13 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
           child: Row(
             children: [
               Container(
-                width: 48, height: 48,
-                decoration: BoxDecoration(color: ThixPolicy.card, borderRadius: BorderRadius.circular(ThixPolicy.rMd), border: Border.all(color: ThixPolicy.border)),
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: ThixPolicy.card,
+                  borderRadius: BorderRadius.circular(ThixPolicy.rMd),
+                  border: Border.all(color: ThixPolicy.border),
+                ),
                 child: Icon(icon, size: 24, color: ThixPolicy.primaryDeep),
               ),
               const SizedBox(width: ThixPolicy.s16),
@@ -214,14 +238,43 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
 
   String _formatPreview(String? raw) {
     if (raw == null || raw.isEmpty) return 'Nouvelle conversation';
-    if (raw.startsWith('ENCv1:') || raw.startsWith('🔒') || (raw.length > 20 && !raw.contains(' ') && RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(raw.replaceFirst(RegExp(r'^ENCv1:'), '')))) {
+    if (raw.startsWith('ENCv1:') ||
+        raw.startsWith('🔒') ||
+        (raw.length > 20 &&
+            !raw.contains(' ') &&
+            RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(raw.replaceFirst(RegExp(r'^ENCv1:'), '')))) {
       return '🔒 Message protégé';
     }
     final lower = raw.toLowerCase();
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp')) return '📷 Photo';
-    if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) return '🎥 Vidéo';
-    if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a') || raw.contains('Message audio (')) return '🎤 Message audio';
+    if (lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp')) {
+      return '📷 Photo';
+    }
+    if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.avi')) {
+      return '🎥 Vidéo';
+    }
+    if (lower.endsWith('.mp3') ||
+        lower.endsWith('.wav') ||
+        lower.endsWith('.m4a') ||
+        raw.contains('Message audio (')) {
+      return '🎤 Message audio';
+    }
     return raw;
+  }
+
+  /// 3 lights identiques au chat screen
+  /// Vert = envoyé · Orange = livré · Rouge = lu
+  Widget _buildReadReceipt(ChatMessage? msg, String currentUserId) {
+    if (msg == null || msg.senderId != currentUserId) {
+      return const SizedBox.shrink();
+    }
+    return ListMessageStatusLights(
+      isDelivered: msg.isDelivered,
+      isRead: msg.isRead,
+    );
   }
 
   @override
@@ -241,7 +294,10 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
 
     for (final c in state.filtered) {
       if (c.isGroup) continue;
-      final otherUserId = c.participantIds.firstWhere((id) => id != currentUserId, orElse: () => '');
+      final otherUserId = c.participantIds.firstWhere(
+        (id) => id != currentUserId,
+        orElse: () => '',
+      );
       if (otherUserId.isNotEmpty && onlineUserIds.contains(otherUserId)) {
         if (seenUserIds.add(otherUserId)) {
           onlineContacts.add(c);
@@ -260,7 +316,9 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
                   backgroundColor: ThixPolicy.card,
                   onRefresh: () async {
                     await notifier.refresh(silent: true);
-                    try { ref.read(statusProvider.notifier).refresh(); } catch (_) {}
+                    try {
+                      ref.read(statusProvider.notifier).refresh();
+                    } catch (_) {}
                   },
                   child: CustomScrollView(
                     controller: _scroll,
@@ -268,7 +326,13 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
                     slivers: [
                       // En-tête Premium
                       SliverToBoxAdapter(
-                        child: _buildEnterpriseHeader(currentUserName, currentUserPhoto, onlineContacts, state.pendingEscalations, currentUserId),
+                        child: _buildEnterpriseHeader(
+                          currentUserName,
+                          currentUserPhoto,
+                          onlineContacts,
+                          state.pendingEscalations,
+                          currentUserId,
+                        ),
                       ),
 
                       // Recherche
@@ -296,7 +360,12 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
 
                       // Chargement
                       if (state.isLoadingMore)
-                        const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(vertical: 28), child: Center(child: CircularProgressIndicator(color: ThixPolicy.primary, strokeWidth: 3)))),
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 28),
+                            child: Center(child: CircularProgressIndicator(color: ThixPolicy.primary, strokeWidth: 3)),
+                          ),
+                        ),
 
                       const SliverToBoxAdapter(child: SizedBox(height: 140)),
                     ],
@@ -495,7 +564,7 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
     );
   }
 
-  // ─────────────────────── LISTE DES CONVERSATIONS (CORRIGÉE) ───────────────────────
+  // ─────────────────────── LISTE DES CONVERSATIONS ───────────────────────
   Widget _chatList(List<ChatConversation> list, String currentUserId, String currentUserName, Set<String> onlineUserIds) {
     if (list.isEmpty) {
       return Padding(
@@ -524,89 +593,273 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
         final otherUserId = conv.participantIds.firstWhere((id) => id != currentUserId, orElse: () => '');
         final isOnline = onlineUserIds.contains(otherUserId);
 
-        // ✅ CORRECTION BUG : Séparation stricte de l'affichage du nom
         String chatName = conv.displayName;
         String? chatAvatar = conv.displayAvatar;
 
         if (conv.isGroup) {
-          // 1. C'est un Groupe : on conserve le nom du groupe
           if (chatName.isEmpty) chatName = 'Groupe THIX';
         } else {
-          // 2. C'est un 1v1 ou une Escalade
-          // Si le backend a renvoyé NOTRE nom au lieu de celui de l'autre participant
           if (chatName.trim() == currentUserName.trim() || chatName.isEmpty) {
             chatName = 'Contact THIX (ID: ${otherUserId.length > 4 ? otherUserId.substring(0, 4) : ''})';
-            // Optionnel: réinitialiser l'avatar si c'est le nôtre
-            // chatAvatar = null; 
           }
         }
 
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _openConversation(conv),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s20, vertical: 12),
-              child: Row(
-                children: [
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 26, backgroundColor: ThixPolicy.surface,
-                        backgroundImage: chatAvatar != null && chatAvatar.isNotEmpty ? CachedNetworkImageProvider(chatAvatar) : null,
-                        child: (chatAvatar == null || chatAvatar.isEmpty) ? Text(chatName.isNotEmpty ? chatName[0].toUpperCase() : '?', style: const TextStyle(fontWeight: FontWeight.w700, color: ThixPolicy.textSecondary, fontSize: 18)) : null,
-                      ),
-                      if (!conv.isGroup && isOnline)
-                        Positioned(right: 0, bottom: 0, child: Container(width: 14, height: 14, decoration: BoxDecoration(color: ThixPolicy.success, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.5)))),
-                    ],
+        // Swipe pour Supprimer la conversation
+        return Dismissible(
+          key: ValueKey(conv.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            color: ThixPolicy.danger,
+            child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 28),
+          ),
+          confirmDismiss: (direction) async {
+            return await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: ThixPolicy.card,
+                title: const Text('Supprimer la discussion', style: TextStyle(fontWeight: FontWeight.w800)),
+                content: const Text('Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action est irréversible pour vous.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false), 
+                    child: const Text('Annuler', style: TextStyle(color: ThixPolicy.textSecondary))
                   ),
-                  const SizedBox(width: ThixPolicy.s16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Flexible(child: Text(chatName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: unread ? FontWeight.w800 : FontWeight.w600, color: ThixPolicy.textMain))),
-                                  // Petit badge pour indiquer visuellement une escalade/groupe (Optionnel)
-                                  if (conv.isGroup) ...[
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.groups_rounded, size: 14, color: ThixPolicy.textSecondary),
-                                  ]
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(_fmt(t), style: TextStyle(fontSize: 11, fontWeight: unread ? FontWeight.w700 : FontWeight.w500, color: unread ? ThixPolicy.primary : ThixPolicy.textSecondary)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _formatPreview(last?.content),
-                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13, fontWeight: unread ? FontWeight.w600 : FontWeight.w400, color: unread ? ThixPolicy.textMain : ThixPolicy.textSecondary),
-                              ),
-                            ),
-                            if (unread)
-                              Container(
-                                margin: const EdgeInsets.only(left: 10),
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(color: ThixPolicy.primary, borderRadius: BorderRadius.circular(12)),
-                                alignment: Alignment.center,
-                                child: Text('${conv.unreadCount}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: ThixPolicy.danger),
+                    onPressed: () => Navigator.pop(ctx, true), 
+                    child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
                   ),
                 ],
+              ),
+            );
+          },
+          onDismissed: (direction) async {
+            try {
+              // Suppression du côté base de données
+              await Supabase.instance.client
+                  .from('conversation_participants')
+                  .delete()
+                  .eq('conversation_id', conv.id)
+                  .eq('user_id', currentUserId);
+                  
+              // Mise à jour de l'UI
+              ref.read(chatListProvider.notifier).refresh(silent: true);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conversation supprimée')));
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors de la suppression'), backgroundColor: ThixPolicy.danger));
+            }
+          },
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _openConversation(conv),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: ThixPolicy.s20, vertical: 12),
+                child: Row(
+                  children: [
+                    // ── Avatar(s) ──
+                    if (conv.isEscalation)
+                      _EscalationAvatars(
+                        clientName: conv.clientName ?? chatName,
+                        clientAvatar: conv.clientAvatar ?? chatAvatar,
+                        agentName: conv.agentName ?? 'Agent',
+                        agentAvatar: conv.agentAvatar,
+                      )
+                    else
+                      Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: ThixPolicy.surface,
+                            backgroundImage: chatAvatar != null && chatAvatar.isNotEmpty
+                                ? CachedNetworkImageProvider(chatAvatar)
+                                : null,
+                            child: (chatAvatar == null || chatAvatar.isEmpty)
+                                ? Text(
+                                    chatName.isNotEmpty ? chatName[0].toUpperCase() : '?',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: ThixPolicy.textSecondary,
+                                      fontSize: 18,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          if (!conv.isGroup && isOnline)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 14,
+                                height: 14,
+                                decoration: BoxDecoration(
+                                  color: ThixPolicy.success,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2.5),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    const SizedBox(width: ThixPolicy.s16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              // ✅ DÉBUT DU BLOC MODIFIÉ POUR LA CERTIFICATION
+                              Expanded(
+                                child: Consumer(
+                                  builder: (context, ref, _) {
+                                    CertificationTier? tier;
+                                    CertificationStatus? status;
+                                    bool isCertified = false;
+                                    bool isLegacyVerified = false;
+
+                                    if (!conv.isGroup && !conv.isEscalation && otherUserId.isNotEmpty) {
+                                      final profileData = ref.watch(userProfileProvider(otherUserId)).valueOrNull;
+                                      if (profileData != null) {
+                                        tier = CertificationTierX.parse(profileData['certification_tier']);
+                                        status = CertificationStatusX.parse(profileData['certification_status']);
+                                        isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+                                        isLegacyVerified = profileData['is_verified'] == true;
+                                      }
+                                    }
+
+                                    return Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            chatName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                                              color: ThixPolicy.textMain,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isCertified)
+                                          CertificationNameBadge(
+                                            tier: tier,
+                                            status: status,
+                                            showLabel: false,
+                                            iconSize: 15,
+                                            padding: const EdgeInsets.only(left: 4),
+                                          )
+                                        else if (isLegacyVerified)
+                                          const Padding(
+                                            padding: EdgeInsets.only(left: 4),
+                                            child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+                                          ),
+                                        if (conv.isEscalation) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: ThixPolicy.danger.withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: ThixPolicy.danger.withValues(alpha: 0.4),
+                                              ),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.swap_vert_rounded, size: 11, color: ThixPolicy.danger),
+                                                SizedBox(width: 3),
+                                                Text(
+                                                  'Escaladé',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: ThixPolicy.danger,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ] else if (conv.isGroup) ...[
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.groups_rounded, size: 14, color: ThixPolicy.textSecondary),
+                                        ],
+                                      ],
+                                    );
+                                  }
+                                ),
+                              ),
+                              // ✅ FIN DU BLOC MODIFIÉ POUR LA CERTIFICATION
+                              
+                              const SizedBox(width: 8),
+                              Text(
+                                _fmt(t),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+                                  color: unread ? ThixPolicy.primary : ThixPolicy.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (conv.isEscalation &&
+                              (conv.escalatedByName?.isNotEmpty ?? false)) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Agent : ${conv.agentName}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: ThixPolicy.textSecondary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              _buildReadReceipt(last, currentUserId),
+                              Expanded(
+                                child: Text(
+                                  _formatPreview(last?.content),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                                    color: unread ? ThixPolicy.textMain : ThixPolicy.textSecondary,
+                                  ),
+                                ),
+                              ),
+                              if (unread)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 10),
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: ThixPolicy.primary,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '${conv.unreadCount}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -615,7 +868,7 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
     );
   }
 
-  // ─────────────────────── GLASS BOTTOM NAV (CORRIGÉE) ───────────────────────
+  // ─────────────────────── GLASS BOTTOM NAV ───────────────────────
   Widget _buildGlassBottomNav(int unread) {
     return Positioned(
       bottom: 24, left: 0, right: 0,
@@ -679,9 +932,8 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
         if (idx == 0) context.pushNamed('connections');
         // ✅ CORRECTION BUG DE BUILD WEB : Route statique à la place de l'enum non trouvé
         else if (idx == 2) {
-  Navigator.push(context, MaterialPageRoute(builder: (_) => CallHistoryPage()));
-}
-
+          Navigator.push(context, MaterialPageRoute(builder: (_) => CallHistoryPage()));
+        }
         else if (idx == 3) Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatSettingsPage()));
         else setState(() => _selectedNav = idx);
       },
@@ -715,5 +967,140 @@ class _ChatListPageState extends ConsumerState<ChatListPage> {
       return DateFormat('EEEE', 'fr_FR').format(localDate);
     }
     return DateFormat('dd/MM/yy').format(localDate);
+  }
+}
+
+/// 3 lights — même logique que le chat screen
+class ListMessageStatusLights extends StatelessWidget {
+  final bool isDelivered;
+  final bool isRead;
+
+  const ListMessageStatusLights({
+    super.key,
+    this.isDelivered = false,
+    this.isRead = false,
+  });
+
+  static const _red = Color(0xFFEF4444);
+  static const _yellow = Color(0xFFF59E0B);
+  static const _green = Color(0xFF22C55E);
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor = isRead ? _red : (isDelivered ? _yellow : _green);
+
+    return Container(
+      width: 9,
+      height: 18,
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _dot(_red, activeColor == _red),
+          _dot(_yellow, activeColor == _yellow),
+          _dot(_green, activeColor == _green),
+        ],
+      ),
+    );
+  }
+
+  Widget _dot(Color base, bool active) {
+    return Container(
+      width: 5,
+      height: 5,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: active ? base : base.withOpacity(0.22),
+      ),
+    );
+  }
+}
+
+/// Double avatar client + agent pour les escalades
+class _EscalationAvatars extends StatelessWidget {
+  final String clientName;
+  final String? clientAvatar;
+  final String agentName;
+  final String? agentAvatar;
+
+  const _EscalationAvatars({
+    required this.clientName,
+    this.clientAvatar,
+    required this.agentName,
+    this.agentAvatar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      height: 44,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: 2,
+            child: _miniAvatar(clientAvatar, clientName, ThixPolicy.primary),
+          ),
+          Positioned(
+            left: 20,
+            top: 2,
+            child: _miniAvatar(agentAvatar, agentName, ThixPolicy.danger),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: ThixPolicy.danger,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: const Icon(Icons.swap_vert_rounded, size: 10, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniAvatar(String? url, String name, Color fallback) {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: CircleAvatar(
+        radius: 15,
+        backgroundColor: fallback.withOpacity(0.15),
+        backgroundImage: (url != null && url.isNotEmpty)
+            ? CachedNetworkImageProvider(url)
+            : null,
+        child: (url == null || url.isEmpty)
+            ? Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: fallback,
+                ),
+              )
+            : null,
+      ),
+    );
   }
 }

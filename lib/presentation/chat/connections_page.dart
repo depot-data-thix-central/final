@@ -1,5 +1,5 @@
 // lib/presentation/chat/connections_page.dart
-import 'dart:ui';
+import 'dart:ui'; // ✅ Corrigé : i minuscule
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +13,10 @@ import 'call/providers/call_provider.dart';
 import 'call/call_page.dart';
 import '../../../models/chat/call_status.dart'; // Pour CallType
 import 'providers/chat_providers.dart'; // Si vous avez besoin du ChatService
+
+// ✅ Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
 
 // Palette "Grandeur Entreprise" (Thème Clair & Lumineux)
 class _C {
@@ -358,6 +362,12 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final role = connection['role'] ?? 'Membre du réseau';
     final avatarUrl = connection['avatar_url'];
 
+    // ✅ Extraction de la certification pour le menu
+    CertificationTier? tier = CertificationTierX.parse(connection['certification_tier']);
+    CertificationStatus? status = CertificationStatusX.parse(connection['certification_status']);
+    bool isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+    bool isLegacyVerified = connection['is_verified'] == true;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -390,7 +400,26 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _C.textMain)),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _C.textMain), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
+                            if (isCertified)
+                              CertificationNameBadge(
+                                tier: tier,
+                                status: status,
+                                showLabel: false,
+                                iconSize: 18,
+                                padding: const EdgeInsets.only(left: 6),
+                              )
+                            else if (isLegacyVerified)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 6),
+                                child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 18),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 2),
                         Text(role, style: const TextStyle(fontSize: 14, color: _C.textMuted, fontWeight: FontWeight.w500)),
                       ],
@@ -555,9 +584,16 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   }
 
   Widget _buildReceivedRequestCard(ConnectionRequest r, ConnectionsNotifier notifier) {
-    final name = r.sender?['display_name'] ?? 'Utilisateur inconnu';
+    final sender = r.sender ?? {};
+    final name = sender['display_name'] ?? 'Utilisateur inconnu';
     final sub = r.message ?? 'Souhaite se connecter avec vous';
-    final avatarUrl = r.sender?['avatar_url'];
+    final avatarUrl = sender['avatar_url'];
+
+    // ✅ Extraction de la certification pour la demande reçue
+    CertificationTier? tier = CertificationTierX.parse(sender['certification_tier']);
+    CertificationStatus? status = CertificationStatusX.parse(sender['certification_status']);
+    bool isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+    bool isLegacyVerified = sender['is_verified'] == true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -586,7 +622,26 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: const TextStyle(color: _C.textMain, fontWeight: FontWeight.bold, fontSize: 15)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(name, style: const TextStyle(color: _C.textMain, fontWeight: FontWeight.bold, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                        if (isCertified)
+                          CertificationNameBadge(
+                            tier: tier,
+                            status: status,
+                            showLabel: false,
+                            iconSize: 15,
+                            padding: const EdgeInsets.only(left: 4),
+                          )
+                        else if (isLegacyVerified)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Text(sub, style: const TextStyle(color: _C.textMuted, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
                   ],
@@ -626,8 +681,15 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   }
 
   Widget _buildSentRequestCard(ConnectionRequest r) {
-    final name = r.receiver?['display_name'] ?? 'Utilisateur inconnu';
-    final avatarUrl = r.receiver?['avatar_url'];
+    final receiver = r.receiver ?? {};
+    final name = receiver['display_name'] ?? 'Utilisateur inconnu';
+    final avatarUrl = receiver['avatar_url'];
+
+    // ✅ Extraction de la certification pour la demande envoyée
+    CertificationTier? tier = CertificationTierX.parse(receiver['certification_tier']);
+    CertificationStatus? status = CertificationStatusX.parse(receiver['certification_status']);
+    bool isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+    bool isLegacyVerified = receiver['is_verified'] == true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -639,7 +701,26 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           decoration: BoxDecoration(color: _C.bg, borderRadius: BorderRadius.circular(12), image: avatarUrl != null ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover) : null),
           child: avatarUrl == null ? Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: _C.textMuted, fontWeight: FontWeight.bold, fontSize: 16))) : null,
         ),
-        title: Text(name, style: const TextStyle(color: _C.textMain, fontWeight: FontWeight.bold, fontSize: 15)),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(name, style: const TextStyle(color: _C.textMain, fontWeight: FontWeight.bold, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (isCertified)
+              CertificationNameBadge(
+                tier: tier,
+                status: status,
+                showLabel: false,
+                iconSize: 15,
+                padding: const EdgeInsets.only(left: 4),
+              )
+            else if (isLegacyVerified)
+              const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+              ),
+          ],
+        ),
         subtitle: Row(
           children: const [
             Icon(Icons.access_time_rounded, size: 14, color: _C.orange),
@@ -661,6 +742,12 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final role = c['role'] ?? 'Réseau'; 
     final avatarUrl = c['avatar_url'];
 
+    // ✅ Extraction de la certification pour l'item de connexion
+    CertificationTier? tier = CertificationTierX.parse(c['certification_tier']);
+    CertificationStatus? status = CertificationStatusX.parse(c['certification_status']);
+    bool isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+    bool isLegacyVerified = c['is_verified'] == true;
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Container(
@@ -674,7 +761,26 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           ? Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: _C.primary, fontWeight: FontWeight.bold, fontSize: 16)))
           : null,
       ),
-      title: Text(name, style: const TextStyle(color: _C.textMain, fontWeight: FontWeight.bold, fontSize: 15)),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(name, style: const TextStyle(color: _C.textMain, fontWeight: FontWeight.bold, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          if (isCertified)
+            CertificationNameBadge(
+              tier: tier,
+              status: status,
+              showLabel: false,
+              iconSize: 15,
+              padding: const EdgeInsets.only(left: 4),
+            )
+          else if (isLegacyVerified)
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+            ),
+        ],
+      ),
       subtitle: Text(role, style: const TextStyle(color: _C.textMuted, fontSize: 13)),
       trailing: IconButton(
         icon: const Icon(Icons.more_horiz_rounded, color: _C.textMuted),

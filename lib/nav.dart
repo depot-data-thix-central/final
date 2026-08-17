@@ -17,7 +17,8 @@ class AppRoutes {
   static const String userDashboard = '/dashboard';
   static const String enterpriseDashboard = '/enterprise-dashboard';
   static const String enterprisePortalBasePath = '/company';
-
+static const String certification = '/certification';
+  
   static const String vault = '/vault';
   static const String settings = '/settings';
   static const String network = '/network';
@@ -227,10 +228,15 @@ class AppRoutes {
   static const String deliveryAdminShipments =
       '/thix-reservation/delivery/admin/shipments';
   static const String deliveryAdminScan = '/thix-reservation/delivery/admin/scan';
-  static const String thixUrgent = '/thix-urgent';
-  static const String chambreDeCrise = '/thix-urgent/chambre-de-crise';
-  static String chambreDeCrisePath(String criseId) =>
-      '/thix-urgent/chambre-de-crise?criseId=$criseId';
+  
+  // THIX RETROUVE
+  static const String thixRetrouve = '/thix-retrouve';
+  static const String thixRetrouveDetail = '/thix-retrouve/detail';
+  static const String thixRetrouveMesRecherches = '/thix-retrouve/mes-recherches';
+  static const String thixRetrouveCarte = '/thix-retrouve/carte';
+  static const String thixRetrouveDeclarerPerdu = '/thix-retrouve/declarer-perdu';
+  static const String thixRetrouveDeclarerTrouve = '/thix-retrouve/declarer-trouve';
+  static const String thixRetrouveAiMatch = '/thix-retrouve/ai-match';
 
   static const String call = '/call';
   static const String callIncoming = '/call/incoming';

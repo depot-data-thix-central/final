@@ -2,12 +2,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:thix_id/nav.dart';
-import 'package:thix_id/models/app_user.dart'; // Si nécessaire pour les types
+import 'package:thix_id/models/app_user.dart';
 import 'package:thix_id/presentation/common/notifications_sheet.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
 import 'package:thix_id/widgets/language_sheet.dart';
 import 'package:thix_id/l10n/locale_controller.dart';
 import 'package:thix_id/services/notification_counters_service.dart';
@@ -41,12 +43,19 @@ class HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get minExtent => _headerExtent();
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
       decoration: BoxDecoration(
         color: ThixPolicy.surface,
         boxShadow: overlapsContent
-            ? [BoxShadow(color: ThixPolicy.inkDeep.withOpacity(0.06), blurRadius: 14, offset: const Offset(0, 8))]
+            ? [
+                BoxShadow(
+                  color: ThixPolicy.inkDeep.withOpacity(0.06),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8),
+                )
+              ]
             : null,
       ),
       child: _PremiumHeader(
@@ -92,10 +101,12 @@ class _PremiumHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trimmedPhoto = (photoUrl ?? '').trim();
-    final localeCode = context.select<LocaleController, String>((c) => c.locale.languageCode);
+    final localeCode =
+        context.select<LocaleController, String>((c) => c.locale.languageCode);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(ThixPolicy.s20, safeTop + 10, ThixPolicy.s20, 10),
+      padding:
+          EdgeInsets.fromLTRB(ThixPolicy.s20, safeTop + 10, ThixPolicy.s20, 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -105,16 +116,27 @@ class _PremiumHeader extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const _RotatingGreeting(),
+                // ── Nom + badge certification ──
                 Row(
                   children: [
                     Flexible(
                       child: Text(
                         displayName,
                         style: const TextStyle(
-                            color: ThixPolicy.textMain, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: -0.3),
+                          color: ThixPolicy.textMain,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.3,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // Badge visible seulement si connecté
+                    if (isAuthenticated)
+                      const CertificationNameBadge(
+                        iconSize: 12,
+                        padding: EdgeInsets.only(left: 6),
+                      ),
                   ],
                 ),
               ],
@@ -122,7 +144,7 @@ class _PremiumHeader extends StatelessWidget {
           ),
           Row(
             children: [
-              // BOUTON LANGUE
+              // LANGUE
               Material(
                 color: ThixPolicy.card,
                 shape: const CircleBorder(),
@@ -149,12 +171,14 @@ class _PremiumHeader extends StatelessWidget {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        const Icon(Icons.language_rounded, size: 20, color: ThixPolicy.primaryDeep),
+                        const Icon(Icons.language_rounded,
+                            size: 20, color: ThixPolicy.primaryDeep),
                         Positioned(
                           right: 2,
                           bottom: 2,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 3, vertical: 1),
                             decoration: BoxDecoration(
                               color: ThixPolicy.primaryDeep,
                               borderRadius: BorderRadius.circular(4),
@@ -162,7 +186,11 @@ class _PremiumHeader extends StatelessWidget {
                             ),
                             child: Text(
                               localeCode.toUpperCase(),
-                              style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 7,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ),
                         ),
@@ -173,14 +201,24 @@ class _PremiumHeader extends StatelessWidget {
               ),
               const SizedBox(width: 8),
 
-              // BOUTON NOTIFICATIONS
+              // NOTIFICATIONS
               StreamBuilder<SectionBadgeCounts>(
                 stream: badgeCountsStream,
                 builder: (context, snap) {
                   final c = snap.data ?? SectionBadgeCounts.zero;
-                  final total = c.messages + c.opportunities + c.jobs + c.events +
-                      c.formations + c.info + c.market + c.media +
-                      c.network + c.health + c.money + c.monPays + c.reservation;
+                  final total = c.messages +
+                      c.opportunities +
+                      c.jobs +
+                      c.events +
+                      c.formations +
+                      c.info +
+                      c.market +
+                      c.media +
+                      c.network +
+                      c.health +
+                      c.money +
+                      c.monPays +
+                      c.reservation;
 
                   return Material(
                     color: ThixPolicy.card,
@@ -208,21 +246,28 @@ class _PremiumHeader extends StatelessWidget {
                           alignment: Alignment.center,
                           clipBehavior: Clip.none,
                           children: [
-                            const Icon(Icons.notifications_none_rounded, size: 20, color: ThixPolicy.primaryDeep),
+                            const Icon(Icons.notifications_none_rounded,
+                                size: 20, color: ThixPolicy.primaryDeep),
                             if (total > 0)
                               Positioned(
                                 right: 0,
                                 top: 0,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: ThixPolicy.danger,
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: Colors.white, width: 1.2),
+                                    border: Border.all(
+                                        color: Colors.white, width: 1.2),
                                   ),
                                   child: Text(
                                     total > 9 ? '9+' : '$total',
-                                    style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w900,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -235,7 +280,7 @@ class _PremiumHeader extends StatelessWidget {
               ),
               const SizedBox(width: 10),
 
-              // AVATAR PROFIL
+              // AVATAR
               GestureDetector(
                 onTap: onProfileTap,
                 child: Container(
@@ -254,11 +299,14 @@ class _PremiumHeader extends StatelessWidget {
                             trimmedPhoto,
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => Container(
-                                color: ThixPolicy.surface, child: const Icon(Icons.person_rounded)),
+                              color: ThixPolicy.surface,
+                              child: const Icon(Icons.person_rounded),
+                            ),
                           )
                         : Container(
                             color: ThixPolicy.tint,
-                            child: const Icon(Icons.person_rounded, color: ThixPolicy.primary),
+                            child: const Icon(Icons.person_rounded,
+                                color: ThixPolicy.primary),
                           ),
                   ),
                 ),
@@ -282,9 +330,9 @@ class _RotatingGreetingState extends State<_RotatingGreeting> {
     {'lang': 'Lingala', 'text': 'Mbote'},
     {'lang': 'Kiswahili', 'text': 'Jambo'},
     {'lang': 'Tshiluba', 'text': 'Moyo'},
-    {'lang': 'Kikongo', 'text': 'Mbote'}
+    {'lang': 'Kikongo', 'text': 'Mbote'},
   ];
-  
+
   int _index = 0;
   Timer? _timer;
 
@@ -313,7 +361,8 @@ class _RotatingGreetingState extends State<_RotatingGreeting> {
         transitionBuilder: (child, anim) => FadeTransition(
           opacity: anim,
           child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(anim),
+            position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+                .animate(anim),
             child: child,
           ),
         ),
@@ -323,7 +372,11 @@ class _RotatingGreetingState extends State<_RotatingGreeting> {
           children: [
             Text(
               g['text']!,
-              style: const TextStyle(color: ThixPolicy.textSecondary, fontSize: 11, fontWeight: FontWeight.w800),
+              style: const TextStyle(
+                color: ThixPolicy.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(width: 5),
             Container(
@@ -334,7 +387,11 @@ class _RotatingGreetingState extends State<_RotatingGreeting> {
               ),
               child: Text(
                 g['lang']!,
-                style: const TextStyle(color: ThixPolicy.primaryDeep, fontSize: 8, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  color: ThixPolicy.primaryDeep,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ],

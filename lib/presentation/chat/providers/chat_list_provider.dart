@@ -94,8 +94,35 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'messages',
-          callback: (_) {
-            if (!_isDisposed) loadInitial(silent: true);
+          callback: (payload) async {
+            if (_isDisposed) return;
+
+            // ── Marquer LIVRÉ dès la liste (pour l'orange) ──
+            try {
+              final raw = payload.newRecord;
+              if (raw != null) {
+                final senderId = raw['sender_id']?.toString();
+                final msgId = raw['id']?.toString();
+                final me = uid;
+
+                if (senderId != null &&
+                    senderId != me &&
+                    msgId != null &&
+                    msgId.isNotEmpty) {
+                  unawaited(
+                    Supabase.instance.client
+                        .from('messages')
+                        .update({'is_delivered': true})
+                        .eq('id', msgId)
+                        .eq('is_delivered', false),
+                  );
+                }
+              }
+            } catch (e) {
+              debugPrint('⚠️ mark delivered from list: $e');
+            }
+
+            loadInitial(silent: true);
           },
         )
         .onPostgresChanges(
@@ -103,7 +130,11 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
           schema: 'public',
           table: 'messages',
           callback: (_) {
-            if (!_isDisposed) _refreshCounts();
+            if (!_isDisposed) {
+              _refreshCounts();
+              // Refresh léger pour mettre à jour is_delivered / is_read sur le lastMessage
+              loadInitial(silent: true);
+            }
           },
         )
         .subscribe();
@@ -156,8 +187,7 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
 
       final merged = <ChatConversation>[...state.all, ...newConvs];
       final seen = <String>{};
-      final deduped =
-          merged.where((c) => seen.add(c.id)).toList();
+      final deduped = merged.where((c) => seen.add(c.id)).toList();
 
       state = state.copyWith(
         all: deduped,
@@ -174,7 +204,6 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
     }
   }
 
-  // 👇 MODIFICATION ICI : On accepte le paramètre 'silent'
   Future<void> refresh({bool silent = false}) => loadInitial(silent: silent);
 
   Future<void> _refreshCounts() async {
@@ -245,9 +274,7 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
 
     state = state.copyWith(filtered: base);
   }
-final statusServiceProvider = Provider<StatusService>((ref) {
-  return StatusService(Supabase.instance.client);
-});
+
   Future<void> markAsRead(String convId) async {
     final updated = state.all.map((c) {
       if (c.id == convId) return c.copyWith(unreadCount: 0);
@@ -275,8 +302,12 @@ final statusServiceProvider = Provider<StatusService>((ref) {
 }
 
 // ============================================================
-// PROVIDER
+// PROVIDERS
 // ============================================================
+
+final statusServiceProvider = Provider<StatusService>((ref) {
+  return StatusService(Supabase.instance.client);
+});
 
 final chatListProvider =
     StateNotifierProvider<ChatListNotifier, ChatListState>((ref) {

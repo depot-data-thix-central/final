@@ -1,8 +1,9 @@
-import 'dart:async';
+import 'dart:async'; 
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart'; 
 
 import '../models/network_post.dart';
 import '../models/network_connection.dart';
@@ -903,31 +904,25 @@ class NetworkService extends ChangeNotifier {
 
   /// ✅ FOLLOW IMMÉDIAT (pas besoin d’approbation)
   Future<void> followUser(String targetId) async {
-    if (currentUserId.isEmpty || targetId == currentUserId) return;
-
-    try {
-      await _supabase.from('follows').upsert({
-        'follower_id': currentUserId,
-        'following_id': targetId,
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'follower_id,following_id');
-
-      unawaited(_createNotification(userId: targetId, type: 'follow'));
-      notifyListeners();
-    } catch (e) {
-      debugPrint('followUser error: $e');
-
-      try {
-        await _supabase.from('connections').upsert({
-          'user1_id': currentUserId,
-          'user2_id': targetId,
-        }, onConflict: 'user1_id,user2_id');
-        notifyListeners();
-      } catch (e2) {
-        debugPrint('followUser fallback error: $e2');
-        rethrow;
-      }
+    if (currentUserId.isEmpty) {
+      throw Exception('Non authentifié');
     }
+    if (targetId.isEmpty || targetId == currentUserId) {
+      throw Exception('Cible invalide');
+    }
+
+    await _supabase.from('follows').upsert({
+      'follower_id': currentUserId,
+      'following_id': targetId,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'follower_id,following_id');
+
+    // Ne pas faire échouer le follow si la notif plante
+    try {
+      unawaited(_createNotification(userId: targetId, type: 'follow'));
+    } catch (_) {}
+
+    notifyListeners();
   }
 
   /// Unfollow
@@ -1208,19 +1203,56 @@ class NetworkService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // PROFILE / POSTS USER
+  // PROFILE / POSTS USER - 🚀 CORRIGÉ
   // ─────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> getUserProfile(String userId) async {
     final res = await _supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, profession, bio')
+        .select(
+          'id, display_name, avatar_url, cover_url, profession, bio, '
+          'certification_tier, certification_status, is_verified',
+        )
         .eq('id', userId)
         .maybeSingle();
+
     if (res == null) return null;
-    final posts =
-        await _supabase.from('posts').select('id').eq('user_id', userId);
-    return {...res, 'posts_count': (posts as List).length};
+
+    try {
+      final postsCount = await _supabase
+          .from('posts')
+          .count(CountOption.exact)
+          .eq('user_id', userId);
+
+      final followersCount = await _supabase
+          .from('follows')
+          .count(CountOption.exact)
+          .eq('following_id', userId);
+
+      final followingCount = await _supabase
+          .from('follows')
+          .count(CountOption.exact)
+          .eq('follower_id', userId);
+
+      return {
+        ...res,
+        'posts_count': postsCount,
+        'followers_count': followersCount,
+        'following_count': followingCount,
+      };
+    } catch (e) {
+      debugPrint('Fallback getUserProfile count: $e');
+      final posts = await _supabase.from('posts').select('id').eq('user_id', userId);
+      final followers = await _supabase.from('follows').select('follower_id').eq('following_id', userId);
+      final following = await _supabase.from('follows').select('following_id').eq('follower_id', userId);
+
+      return {
+        ...res,
+        'posts_count': (posts as List).length,
+        'followers_count': (followers as List).length,
+        'following_count': (following as List).length,
+      };
+    }
   }
 
   Future<List<NetworkPost>> getUserPosts(
@@ -1262,7 +1294,7 @@ class NetworkService extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // UPLOAD
+  // UPLOAD AVEC COMPRESSION INTÉGRÉE 🌟
   // ─────────────────────────────────────────────────────────────
 
   Future<String?> uploadImageBytes(
@@ -1279,9 +1311,35 @@ class NetworkService extends ChangeNotifier {
       final mimeType =
           isVideo ? 'video/$fileExtension' : 'image/$fileExtension';
 
+      Uint8List finalBytes = bytes;
+
+      // 🌟 Compression des images avant l'envoi
+      if (!isVideo && !kIsWeb) {
+        try {
+          final compressFormat = fileExtension.toLowerCase() == 'png' 
+              ? CompressFormat.png 
+              : CompressFormat.jpeg;
+
+          final compressed = await FlutterImageCompress.compressWithList(
+            bytes,
+            minWidth: 1080, // Redimensionnement intelligent
+            minHeight: 1080,
+            quality: 80, // Compression à 80% (excellent compromis qualité/poids)
+            format: compressFormat,
+          );
+          
+          if (compressed.isNotEmpty) {
+            finalBytes = compressed;
+          }
+        } catch (e) {
+          debugPrint('Erreur de compression (utilisation de l\'image brute) : $e');
+        }
+      }
+
+      // Envoi du fichier (compressé ou brut) vers Supabase
       await _supabase.storage.from(bucket).uploadBinary(
             path,
-            bytes,
+            finalBytes,
             fileOptions: FileOptions(contentType: mimeType, upsert: true),
           );
 

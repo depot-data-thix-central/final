@@ -1,5 +1,5 @@
 // lib/presentation/chat/new_conversation_page.dart
-import 'dart:async';
+import 'dart:async'; // ✅ Corrigé : i minuscule
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +8,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../nav.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/chat/connection_service.dart';
+
+// ✅ Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
 
 // Nouvelle palette "Grandeur Entreprise" (Thème Clair)
 class _C {
@@ -94,8 +98,9 @@ class NewConvNotifier extends StateNotifier<NewConvState> {
     }
     
     try {
-      final exact = await supabase.from('profiles').select('id, display_name, avatar_url, profession, thix_chat').ilike('thix_chat', '%$q%').range(_offset, _offset + 4);
-      final names = await supabase.from('profiles').select('id, display_name, avatar_url, profession, thix_chat').ilike('display_name', '%$q%').range(_offset, _offset + _limit - 1);
+      // ✅ Ajout des champs de certification dans le select()
+      final exact = await supabase.from('profiles').select('id, display_name, avatar_url, profession, thix_chat, certification_tier, certification_status, is_verified').ilike('thix_chat', '%$q%').range(_offset, _offset + 4);
+      final names = await supabase.from('profiles').select('id, display_name, avatar_url, profession, thix_chat, certification_tier, certification_status, is_verified').ilike('display_name', '%$q%').range(_offset, _offset + _limit - 1);
 
       final seen = <String>{...state.selected.map((e) => e['id'] as String)};
       final merged = <Map<String,dynamic>>[];
@@ -327,38 +332,57 @@ class _NewConversationPageState extends ConsumerState<NewConversationPage> {
 
   Future<void> _startChat() async {
     final state = ref.read(newConvProvider);
-    if (state.selected.isEmpty) { 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionnez un contact'))); 
-      return; 
+    if (state.selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sélectionnez un contact')),
+      );
+      return;
     }
-    
-    final cur = Supabase.instance.client.auth.currentUser?.id; 
+
+    final cur = Supabase.instance.client.auth.currentUser?.id;
     if (cur == null) return;
-    
-    final notConnected = state.selected.where((u) { 
-      final s = state.connStatus[u['id']] ?? 'none'; 
-      return s != 'connected'; 
+
+    final notConnected = state.selected.where((u) {
+      final s = state.connStatus[u['id']] ?? 'none';
+      return s != 'connected';
     }).toList();
-    
-    if (notConnected.isNotEmpty) { 
-      final names = notConnected.map((u) => u['display_name']).join(', '); 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('En attente de connexion: $names'), backgroundColor: Colors.orange)); 
-      return; 
+
+    if (notConnected.isNotEmpty) {
+      final names = notConnected.map((u) => u['display_name']).join(', ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('En attente de connexion: $names'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
     }
-    
+
     ref.read(newConvProvider.notifier).setCreating(true);
     try {
-      final ids = [...state.selected.map((u) => u['id'] as String), cur];
-      final conv = await _chatService.createConversation(
-        participantIds: ids.toSet().toList(), 
-        isGroup: state.selected.length > 1, 
-        groupName: state.selected.length > 1 ? state.groupName.trim() : null
+      // ── 1 contact = DM via RPC (RLS-safe) ──
+      if (state.selected.length == 1) {
+        final otherId = state.selected.first['id'] as String;
+        final conv = await _chatService.createDirectConversation(otherId);
+        if (mounted) {
+          context.pushReplacement(AppRoutes.chatDetail(conv.id), extra: conv);
+        }
+        return;
+      }
+
+      // ── Plusieurs = groupe (nécessite RPC groupe, sinon erreur claire) ──
+      throw Exception(
+        'Création de groupe : utilisez une RPC create_group_conversation '
+        '(insert multi-participants bloqué par RLS).',
       );
-      if (mounted) context.pushReplacement(AppRoutes.chatDetail(conv.id), extra: conv);
-    } catch(e) { 
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: _C.red)); 
-    } finally { 
-      ref.read(newConvProvider.notifier).setCreating(false); 
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: _C.red),
+        );
+      }
+    } finally {
+      ref.read(newConvProvider.notifier).setCreating(false);
     }
   }
 
@@ -468,6 +492,19 @@ class _NewConversationPageState extends ConsumerState<NewConversationPage> {
                 itemCount: state.selected.length,
                 itemBuilder: (ctx, i) { 
                   final u = state.selected[i]; 
+                  
+                  // Extraction de la certification pour le petit badge
+                  CertificationTier? selTier;
+                  CertificationStatus? selStatus;
+                  bool selIsCertified = false;
+                  bool selIsLegacyVerified = u['is_verified'] == true;
+
+                  if (u.containsKey('certification_tier') && u['certification_tier'] != null) {
+                    selTier = CertificationTierX.parse(u['certification_tier']);
+                    selStatus = CertificationStatusX.parse(u['certification_status']);
+                    selIsCertified = selStatus == CertificationStatus.approved || selStatus == CertificationStatus.generated;
+                  }
+
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: Container(
@@ -488,6 +525,19 @@ class _NewConversationPageState extends ConsumerState<NewConversationPage> {
                           ),
                           const SizedBox(width: 8),
                           Text(u['display_name'] ?? '', style: const TextStyle(color: _C.primary, fontSize: 13, fontWeight: FontWeight.bold)),
+                          if (selIsCertified)
+                            CertificationNameBadge(
+                              tier: selTier,
+                              status: selStatus,
+                              showLabel: false,
+                              iconSize: 12,
+                              padding: const EdgeInsets.only(left: 4),
+                            )
+                          else if (selIsLegacyVerified)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4),
+                              child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 12),
+                            ),
                           const SizedBox(width: 6),
                           InkWell(
                             onTap: () => notifier.toggleSelect(u),
@@ -540,6 +590,18 @@ class _NewConversationPageState extends ConsumerState<NewConversationPage> {
                       final isSel = state.selected.any((s) => s['id'] == id); 
                       final (label, color) = _statusDisplay(state.connStatus[id]); 
                       
+                      // Extraction de la certification pour le résultat
+                      CertificationTier? tier;
+                      CertificationStatus? status;
+                      bool isCertified = false;
+                      bool isLegacyVerified = user['is_verified'] == true;
+
+                      if (user.containsKey('certification_tier') && user['certification_tier'] != null) {
+                        tier = CertificationTierX.parse(user['certification_tier']);
+                        status = CertificationStatusX.parse(user['certification_status']);
+                        isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+                      }
+
                       return InkWell(
                         onTap: () => _onUserTap(user),
                         borderRadius: BorderRadius.circular(16),
@@ -567,6 +629,19 @@ class _NewConversationPageState extends ConsumerState<NewConversationPage> {
                                     Row(
                                       children: [
                                         Flexible(child: Text(user['display_name'] ?? 'Utilisateur', style: const TextStyle(color: _C.textMain, fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis)),
+                                        if (isCertified)
+                                          CertificationNameBadge(
+                                            tier: tier,
+                                            status: status,
+                                            showLabel: false,
+                                            iconSize: 15,
+                                            padding: const EdgeInsets.only(left: 4),
+                                          )
+                                        else if (isLegacyVerified)
+                                          const Padding(
+                                            padding: EdgeInsets.only(left: 4),
+                                            child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+                                          ),
                                         const SizedBox(width: 8),
                                         if (label.isNotEmpty) 
                                           Container(

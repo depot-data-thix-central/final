@@ -34,6 +34,11 @@ import 'package:thix_id/presentation/chat/call/providers/call_provider.dart';
 import 'package:thix_id/presentation/chat/providers/chat_providers.dart';
 import 'package:thix_id/presentation/chat/providers/chat_list_provider.dart';
 
+// ✅ Imports pour la certification
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
+
 // Messages provider (family)
 final chatMessagesProvider = StateNotifierProvider.family<ChatMsgNotifier, List<ChatMessage>, String>((ref, conversationId) {
   return ChatMsgNotifier(ref.read(chatServiceProvider), conversationId);
@@ -79,6 +84,8 @@ class ChatMsgNotifier extends StateNotifier<List<ChatMessage>> {
   }
 
   void upsertRealtime(List<ChatMessage> updated) {
+    if (updated.isEmpty) return;
+
     var current = [...state];
     var changed = false;
 
@@ -95,14 +102,8 @@ class ChatMsgNotifier extends StateNotifier<List<ChatMessage>> {
 
     if (changed) {
       current.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      state = current;
-    }
-  }
-
-  void addLocal(ChatMessage msg) {
-    if (!state.any((m) => m.id == msg.id)) {
-      final current = [msg, ...state]
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final seen = <String>{};
+      current = current.where((m) => seen.add(m.id)).toList();
       state = current;
     }
   }
@@ -397,7 +398,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   void _subscribeToRealtime() {
     _messageSub = _chatService.subscribeToMessages(widget.conversationId).listen((updated) {
       ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime(updated);
-      _markAsRead();
+
+      final me = _chatService.currentUserId;
+
+      // 1. Marquer LIVRÉ (orange) tout de suite
+      for (final m in updated) {
+        if (m.senderId != me && !m.isDelivered && !m.isDeleted) {
+          unawaited(
+            Supabase.instance.client.from('messages').update({
+              'is_delivered': true,
+            }).eq('id', m.id).eq('is_delivered', false),
+          );
+        }
+      }
+
+      // 2. Marquer LU (rouge) avec un petit délai
+      //    pour laisser le temps à l’orange d’apparaître chez l’expéditeur
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) _markAsRead();
+      });
     });
   }
 
@@ -518,7 +537,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           final response = await http.get(Uri.parse(path));
           bytes = response.bodyBytes;
         } else {
-          final file = File(path); // Utilise File de dart:io (Compatible Web car on est dans le bloc else)
+          final file = File(path); 
           bytes = await file.readAsBytes();
         }
         if (mounted) {
@@ -539,7 +558,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   }
 
   Future<void> _sendMessage() async {
-    if (!_isConnectionValid) return; 
+    if (!_isConnectionValid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connexion inactive — impossible d\'envoyer.'),
+            backgroundColor: ThixPolicy.danger,
+          ),
+        );
+      }
+      return;
+    }
 
     final text = _inputController.text.trim();
     if (text.isEmpty && _selectedFiles.isEmpty && _audioBytes == null) return;
@@ -559,7 +588,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           ephemeralDuration: _ephemeralDuration,
           replyToId: _replyToId.isEmpty ? null : _replyToId,
         );
-        ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+        // ✅ CORRIGÉ ICI
+        ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
       } 
       else if (_selectedFiles.isNotEmpty) {
         final filesToSend = List<PlatformFile>.from(_selectedFiles);
@@ -605,7 +635,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                 ephemeralDuration: _ephemeralDuration,
                 replyToId: i == 0 && _replyToId.isNotEmpty ? _replyToId : null,
               );
-              ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+              // ✅ CORRIGÉ ICI
+              ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
             }
           }
         }
@@ -632,7 +663,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
               ephemeralDuration: _ephemeralDuration,
               replyToId: _replyToId.isEmpty ? null : _replyToId,
             );
-            ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+            // ✅ CORRIGÉ ICI
+            ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
           }
         }
       } 
@@ -644,7 +676,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           isEphemeral: _isEphemeral,
           ephemeralDuration: _isEphemeral ? _ephemeralDuration : null,
         );
-        ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+        // ✅ CORRIGÉ ICI
+        ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
       }
 
       if (mounted) {
@@ -653,16 +686,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
           _replyToId = '';
           _audioBytes = null;
           _localAudioPath = null;
-          _isSending = false;
           if (_isInternalNoteMode) _isInternalNoteMode = false;
         });
       }
       _scrollToBottom();
     } catch (e) {
+      debugPrint('❌ _sendMessage: $e');
       if (mounted) {
-        setState(() => _isSending = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: ThixPolicy.danger));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Envoi impossible: $e'),
+            backgroundColor: ThixPolicy.danger,
+          ),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -781,7 +820,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                 final msg = await _chatService.sendMessage(
                       conversationId: widget.conversationId, content: enc, replyToId: _replyToId.isEmpty ? null : _replyToId, isEphemeral: _isEphemeral, ephemeralDuration: _ephemeralDuration,
                     );
-                ref.read(chatMessagesProvider(widget.conversationId).notifier).addLocal(msg);
+                // ✅ CORRIGÉ ICI
+                ref.read(chatMessagesProvider(widget.conversationId).notifier).upsertRealtime([msg]);
                 if (mounted) setState(() => _replyToId = '');
                 _scrollToBottom();
               } catch (e) {
@@ -904,8 +944,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                           isOwn: isOwn,
                           onReply: () => setState(() => _replyToId = msg.id),
                           onDelete: () async {
-                            ref.read(chatMessagesProvider(widget.conversationId).notifier).removeLocal(msg.id);
-                            if (isOwn) try { await _chatService.deleteMessage(msg.id); } catch (_) {}
+                            if (isOwn) {
+                              try {
+                                await _chatService.deleteMessage(msg.id);
+                                ref
+                                    .read(chatMessagesProvider(widget.conversationId).notifier)
+                                    .removeLocal(msg.id);
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Suppression impossible: $e'),
+                                      backgroundColor: ThixPolicy.danger,
+                                    ),
+                                  );
+                                }
+                              }
+                            }
                           },
                           onReaction: (r) => _chatService.toggleReaction(msg.id, r),
                           replyToMessage: msg.replyToId != null ? messages.where((m) => m.id == msg.replyToId).firstOrNull : null,
@@ -991,7 +1046,55 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.conversation.displayName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: ThixPolicy.textMain), maxLines: 1, overflow: TextOverflow.ellipsis),
+                // ✅ AJOUT DE LA CERTIFICATION VIA UN CONSUMER
+                Consumer(
+                  builder: (context, ref, _) {
+                    CertificationTier? tier;
+                    CertificationStatus? status;
+                    bool isCertified = false;
+                    bool isLegacyVerified = false;
+
+                    if (!widget.conversation.isGroup) {
+                      final myId = _chatService.currentUserId;
+                      final otherId = widget.conversation.participantIds.firstWhere((id) => id != myId, orElse: () => '');
+                      if (otherId.isNotEmpty) {
+                        final profileData = ref.watch(userProfileProvider(otherId)).valueOrNull;
+                        if (profileData != null) {
+                          tier = CertificationTierX.parse(profileData['certification_tier']);
+                          status = CertificationStatusX.parse(profileData['certification_status']);
+                          isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+                          isLegacyVerified = profileData['is_verified'] == true;
+                        }
+                      }
+                    }
+
+                    return Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.conversation.displayName, 
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: ThixPolicy.textMain), 
+                            maxLines: 1, 
+                            overflow: TextOverflow.ellipsis
+                          ),
+                        ),
+                        if (isCertified)
+                          CertificationNameBadge(
+                            tier: tier,
+                            status: status,
+                            showLabel: false,
+                            iconSize: 15,
+                            padding: const EdgeInsets.only(left: 4),
+                          )
+                        else if (isLegacyVerified)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 15),
+                          ),
+                      ],
+                    );
+                  },
+                ),
                 if (!widget.conversation.isGroup && _otherParticipant != null)
                   Text(_getPresenceText(_otherParticipant!), style: TextStyle(fontSize: 12, color: _isOnline ? ThixPolicy.success : ThixPolicy.textSecondary, fontWeight: _isOnline ? FontWeight.w600 : FontWeight.w400))
                 else if (widget.conversation.isGroup)

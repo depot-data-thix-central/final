@@ -13,8 +13,8 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:path_provider/path_provider.dart'; // 🌟 Ajout pour le path
-import 'package:path/path.dart' as p;             // 🌟 Ajout pour le path
+import 'package:path_provider/path_provider.dart'; 
+import 'package:path/path.dart' as p;             
 
 import 'package:thix_id/models/network_post.dart';
 import 'package:thix_id/models/comment.dart';
@@ -23,6 +23,11 @@ import 'package:thix_id/features/network/presentation/providers/comments_provide
 import 'package:thix_id/presentation/network/widgets/post_card.dart';
 import 'package:thix_id/features/auth/presentation/providers/auth_controller.dart';
 import 'package:timeago/timeago.dart' as timeago;
+
+// ✅ CERTIFICATION & SYNCHRO PROFIL
+import 'package:thix_id/models/certification_tier.dart';
+import 'package:thix_id/presentation/certification/widgets/certification_name_badge.dart';
+import 'package:thix_id/features/network/presentation/providers/user_profile_providers.dart';
 
 class _C {
   static const bg = Color(0xFFF5F8FA);
@@ -480,22 +485,50 @@ class _CommentsPageState extends ConsumerState<CommentsPage> {
   Widget _buildCommentThread(Comment comment, String? currentUserId) {
     final hasReplies = comment.replies.isNotEmpty;
     final isExpanded = _expandedComments.contains(comment.id);
-    final hiddenCount = comment.replies.length - 1; // On laisse la dernière réponse visible
+    final hiddenCount = comment.replies.length - 1; 
 
     List<Widget> threadChildren = [
-      _buildSingleCommentBubble(comment, currentUserId, isReply: false, isLastReply: !hasReplies),
+      _CommentBubble(
+        comment: comment,
+        currentUserId: currentUserId,
+        isReply: false,
+        isLastReply: !hasReplies,
+        onLongPress: () => _showCommentActions(comment, currentUserId ?? ''),
+        onLike: () => _toggleLikeComment(comment),
+        onReply: () => _startReply(comment.userName, comment.id),
+      ),
     ];
 
     if (hasReplies) {
       if (!isExpanded && comment.replies.length > 1) {
-        // 🌟 STYLE FACEBOOK : Afficher "Voir les X réponses" et la toute dernière réponse
+        // Afficher "Voir les X réponses" et la toute dernière réponse
         threadChildren.add(_buildViewMoreRepliesBtn(comment, hiddenCount));
-        threadChildren.add(_buildSingleCommentBubble(comment.replies.last, currentUserId, isReply: true, isLastReply: true));
+        final lastReply = comment.replies.last;
+        threadChildren.add(
+          _CommentBubble(
+            comment: lastReply,
+            currentUserId: currentUserId,
+            isReply: true,
+            isLastReply: true,
+            onLongPress: () => _showCommentActions(lastReply, currentUserId ?? ''),
+            onLike: () => _toggleLikeComment(lastReply),
+            onReply: () => _startReply(lastReply.userName, lastReply.parentId ?? lastReply.id),
+          )
+        );
       } else {
         // Afficher toutes les réponses si déployé ou s'il n'y a qu'une seule réponse
         for (int i = 0; i < comment.replies.length; i++) {
+          final reply = comment.replies[i];
           threadChildren.add(
-            _buildSingleCommentBubble(comment.replies[i], currentUserId, isReply: true, isLastReply: i == comment.replies.length - 1)
+            _CommentBubble(
+              comment: reply,
+              currentUserId: currentUserId,
+              isReply: true,
+              isLastReply: i == comment.replies.length - 1,
+              onLongPress: () => _showCommentActions(reply, currentUserId ?? ''),
+              onLike: () => _toggleLikeComment(reply),
+              onReply: () => _startReply(reply.userName, reply.parentId ?? reply.id),
+            )
           );
         }
       }
@@ -549,133 +582,6 @@ class _CommentsPageState extends ConsumerState<CommentsPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSingleCommentBubble(Comment comment, String? currentUserId, {required bool isReply, required bool isLastReply}) {
-    final hasAudio = comment.audioUrl != null && comment.audioUrl!.isNotEmpty;
-    final hasImage = comment.imageUrl != null && comment.imageUrl!.isNotEmpty;
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 🌟 LIGNE EN "L" POUR LES RÉPONSES
-          if (isReply)
-            SizedBox(
-              width: 44,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 22, 
-                    top: 0, 
-                    bottom: isLastReply ? null : 0, 
-                    height: isLastReply ? 24 : null, // Arrête la ligne à la branche si c'est la dernière réponse
-                    child: Container(width: 2, color: Colors.grey.shade300)
-                  ),
-                  Positioned(
-                    left: 22, 
-                    top: 24, 
-                    child: Container(width: 14, height: 2, color: Colors.grey.shade300)
-                  ),
-                ],
-              ),
-            ),
-            
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(left: isReply ? 0 : 16, right: 16, bottom: 8),
-              child: GestureDetector(
-                onLongPress: () => _showCommentActions(comment, currentUserId ?? ''),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white, 
-                    borderRadius: BorderRadius.circular(16), 
-                    border: Border.all(color: const Color(0xFFE7EEFC)),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start, 
-                    children: [
-                      ListTile(
-                        contentPadding: const EdgeInsets.only(left: 12, right: 12, top: 4),
-                        leading: CircleAvatar(
-                          radius: isReply ? 14 : 16, 
-                          backgroundColor: const Color(0xFFEAF1FF),
-                          backgroundImage: comment.userAvatar != null && comment.userAvatar!.isNotEmpty ? NetworkImage(comment.userAvatar!) : null, 
-                          child: comment.userAvatar == null || comment.userAvatar!.isEmpty ? Icon(Icons.person, size: isReply ? 14 : 16, color: Colors.grey[600]) : null
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(child: Text(comment.userName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF10192E)), maxLines: 1, overflow: TextOverflow.ellipsis)), 
-                            Text(timeago.format(comment.createdAt, locale: 'fr'), style: TextStyle(color: Colors.grey[500], fontSize: 10))
-                          ]
-                        ),
-                      ),
-                      
-                      if (comment.content.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2), 
-                          child: Text(comment.content, style: const TextStyle(fontSize: 13.5, height: 1.4, color: Color(0xFF10192E)))
-                        ),
-
-                      if (hasImage)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14, right: 14, top: 8),
-                          child: ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(comment.imageUrl!, height: 160, width: double.infinity, fit: BoxFit.cover)),
-                        ),
-                        
-                      if (hasAudio)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14, right: 14, top: 8),
-                          child: _CommentAudioPlayer(audioUrl: comment.audioUrl!, isLocal: false), 
-                        ),
-
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), 
-                        child: Row(
-                          children: [
-                            _actionButton(
-                              icon: comment.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
-                              iconColor: comment.isLiked ? const Color(0xFFE5484D) : Colors.grey[500]!, 
-                              label: comment.likesCount > 0 ? '${comment.likesCount}' : '', 
-                              onTap: () => _toggleLikeComment(comment)
-                            ),
-                            const SizedBox(width: 8),
-                            _actionButton(
-                              icon: Icons.reply_rounded, 
-                              iconColor: Colors.grey[600]!, 
-                              label: 'Répondre', 
-                              onTap: () => _startReply(comment.userName, isReply ? (comment.parentId ?? comment.id) : comment.id)
-                            ),
-                          ]
-                        )
-                      ),
-                    ]
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionButton({required IconData icon, required Color iconColor, required String label, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap, 
-      borderRadius: BorderRadius.circular(20), 
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), 
-        child: Row(
-          mainAxisSize: MainAxisSize.min, 
-          children: [
-            Icon(icon, size: 16, color: iconColor), 
-            if (label.isNotEmpty)...[const SizedBox(width: 4), Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[600]))]
-          ]
-        )
-      )
     );
   }
 
@@ -816,6 +722,193 @@ class _CommentsPageState extends ConsumerState<CommentsPage> {
     return GridView.builder(
       padding: const EdgeInsets.all(8), gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemCount: items.length, itemBuilder: (context, index) => InkWell(onTap: () => _insertSticker(items[index]), child: Center(child: Text(items[index], style: const TextStyle(fontSize: 24)))),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// WIDGET CONSOMMATEUR (POUR LA BULLE DE COMMENTAIRE)
+// ─────────────────────────────────────────────────────────────
+class _CommentBubble extends ConsumerWidget {
+  final Comment comment;
+  final String? currentUserId;
+  final bool isReply;
+  final bool isLastReply;
+  final VoidCallback onLongPress;
+  final VoidCallback onLike;
+  final VoidCallback onReply;
+
+  const _CommentBubble({
+    Key? key,
+    required this.comment,
+    required this.currentUserId,
+    required this.isReply,
+    required this.isLastReply,
+    required this.onLongPress,
+    required this.onLike,
+    required this.onReply,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasAudio = comment.audioUrl != null && comment.audioUrl!.isNotEmpty;
+    final hasImage = comment.imageUrl != null && comment.imageUrl!.isNotEmpty;
+
+    // ✅ Récupération dynamique de la certification pour le commentaire
+    final authorProfile = ref.watch(userProfileProvider(comment.userId)).valueOrNull;
+    CertificationTier? tier;
+    CertificationStatus? status;
+    bool isCertified = false;
+    bool isLegacyVerified = false;
+
+    if (authorProfile != null) {
+      tier = CertificationTierX.parse(authorProfile['certification_tier']);
+      status = CertificationStatusX.parse(authorProfile['certification_status']);
+      isCertified = status == CertificationStatus.approved || status == CertificationStatus.generated;
+      isLegacyVerified = authorProfile['is_verified'] == true;
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 🌟 LIGNE EN "L" POUR LES RÉPONSES
+          if (isReply)
+            SizedBox(
+              width: 44,
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 22, 
+                    top: 0, 
+                    bottom: isLastReply ? null : 0, 
+                    height: isLastReply ? 24 : null, 
+                    child: Container(width: 2, color: Colors.grey.shade300)
+                  ),
+                  Positioned(
+                    left: 22, 
+                    top: 24, 
+                    child: Container(width: 14, height: 2, color: Colors.grey.shade300)
+                  ),
+                ],
+              ),
+            ),
+            
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(left: isReply ? 0 : 16, right: 16, bottom: 8),
+              child: GestureDetector(
+                onLongPress: onLongPress,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white, 
+                    borderRadius: BorderRadius.circular(16), 
+                    border: Border.all(color: const Color(0xFFE7EEFC)),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, 
+                    children: [
+                      ListTile(
+                        contentPadding: const EdgeInsets.only(left: 12, right: 12, top: 4),
+                        leading: CircleAvatar(
+                          radius: isReply ? 14 : 16, 
+                          backgroundColor: const Color(0xFFEAF1FF),
+                          backgroundImage: comment.userAvatar != null && comment.userAvatar!.isNotEmpty ? NetworkImage(comment.userAvatar!) : null, 
+                          child: comment.userAvatar == null || comment.userAvatar!.isEmpty ? Icon(Icons.person, size: isReply ? 14 : 16, color: Colors.grey[600]) : null
+                        ),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                comment.userName, 
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF10192E)), 
+                                maxLines: 1, 
+                                overflow: TextOverflow.ellipsis
+                              )
+                            ), 
+                            if (isCertified)
+                              CertificationNameBadge(
+                                tier: tier,
+                                status: status,
+                                showLabel: false, // Badge seul
+                                iconSize: 13,
+                                padding: const EdgeInsets.only(left: 4),
+                              )
+                            else if (isLegacyVerified)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(Icons.verified_rounded, color: Color(0xFFE3B23C), size: 13),
+                              ),
+                            const SizedBox(width: 6),
+                            Text(timeago.format(comment.createdAt, locale: 'fr'), style: TextStyle(color: Colors.grey[500], fontSize: 10))
+                          ]
+                        ),
+                      ),
+                      
+                      if (comment.content.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2), 
+                          child: Text(comment.content, style: const TextStyle(fontSize: 13.5, height: 1.4, color: Color(0xFF10192E)))
+                        ),
+
+                      if (hasImage)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14, right: 14, top: 8),
+                          child: ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(comment.imageUrl!, height: 160, width: double.infinity, fit: BoxFit.cover)),
+                        ),
+                        
+                      if (hasAudio)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14, right: 14, top: 8),
+                          child: _CommentAudioPlayer(audioUrl: comment.audioUrl!, isLocal: false), 
+                        ),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), 
+                        child: Row(
+                          children: [
+                            _actionButton(
+                              icon: comment.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
+                              iconColor: comment.isLiked ? const Color(0xFFE5484D) : Colors.grey[500]!, 
+                              label: comment.likesCount > 0 ? '${comment.likesCount}' : '', 
+                              onTap: onLike
+                            ),
+                            const SizedBox(width: 8),
+                            _actionButton(
+                              icon: Icons.reply_rounded, 
+                              iconColor: Colors.grey[600]!, 
+                              label: 'Répondre', 
+                              onTap: onReply
+                            ),
+                          ]
+                        )
+                      ),
+                    ]
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({required IconData icon, required Color iconColor, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap, 
+      borderRadius: BorderRadius.circular(20), 
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), 
+        child: Row(
+          mainAxisSize: MainAxisSize.min, 
+          children: [
+            Icon(icon, size: 16, color: iconColor), 
+            if (label.isNotEmpty)...[const SizedBox(width: 4), Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[600]))]
+          ]
+        )
+      )
     );
   }
 }

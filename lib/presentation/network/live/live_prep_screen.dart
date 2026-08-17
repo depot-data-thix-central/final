@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:thix_id/data/models/live/live_model.dart'; // 🌟 Importation de votre modèle
 import 'live_broadcast_screen.dart';
 
 class _C {
-  static const primary = Color(0xFF2D6CDF);
   static const red = Color(0xFFE5484D);
   static const bgDark = Color(0xFF10192E);
 }
@@ -26,102 +26,151 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
 
   RtcEngine? _engine;
   bool _isEngineReady = false;
-  bool _isStartingLive = false; // 🌟 État de chargement
+  bool _isStartingLive = false;
 
   @override
   void initState() {
     super.initState();
-    _initPreviewAgora();
+    _checkPermissionsAndInit();
+  }
+
+  Future<void> _checkPermissionsAndInit() async {
+    if (kIsWeb) {
+      await _initPreviewAgora();
+      return;
+    }
+
+    var cameraStatus = await Permission.camera.status;
+    var micStatus = await Permission.microphone.status;
+
+    if (cameraStatus.isDenied || micStatus.isDenied) {
+      if (!mounted) return;
+
+      bool? userAgreed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false, 
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.privacy_tip_outlined, color: Colors.black, size: 28),
+              SizedBox(width: 10),
+              Text(
+                "Autorisations",
+                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Pour démarrer votre direct, THIX ID a besoin d'accéder à votre caméra et votre microphone. "
+            "Ces accès ne sont utilisés que pendant la diffusion.",
+            style: TextStyle(color: Colors.black87, fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Annuler", style: TextStyle(color: Colors.black54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                side: const BorderSide(color: Colors.black, width: 1),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Compris", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+
+      if (userAgreed != true) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+
+      Map<Permission, PermissionStatus> statuses = await [
+        Permission.camera,
+        Permission.microphone,
+      ].request();
+
+      if (statuses[Permission.camera]!.isGranted && statuses[Permission.microphone]!.isGranted) {
+        await _initPreviewAgora();
+      } else {
+        if (mounted) Navigator.pop(context);
+      }
+    } else {
+      await _initPreviewAgora();
+    }
   }
 
   Future<void> _initPreviewAgora() async {
     try {
-      if (!kIsWeb) {
-        await [Permission.camera, Permission.microphone].request();
-      }
-
       String appId = "96ed392d17c74fe684bbb9d4a031ad12"; 
-
       _engine = createAgoraRtcEngine();
       await _engine!.initialize(RtcEngineContext(
         appId: appId,
         channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
       ));
-
       await _engine!.enableVideo();
       await _engine!.startPreview();
-
       if (mounted) setState(() => _isEngineReady = true);
-      
     } catch (e) {
-      debugPrint('Erreur init preview Agora: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur Caméra : $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 10),
-          ),
-        );
-      }
+      debugPrint('Erreur init Agora: $e');
     }
   }
 
   Future<void> _startLive() async {
     if (_isStartingLive) return;
-
-    final title = _titleController.text.trim().isEmpty 
-        ? "Mon Direct" 
-        : _titleController.text.trim();
-
+    final title = _titleController.text.trim().isEmpty ? "Mon Direct" : _titleController.text.trim();
     setState(() => _isStartingLive = true);
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception("Vous devez être connecté");
 
-      // 1. Générer un nom de canal unique
       final channelName = 'live_${user.id}_${DateTime.now().millisecondsSinceEpoch}';
-
-      // 2. 🚀 Enregistrer le direct dans Supabase
+      
+      // 1. Insertion en base de données
       final response = await Supabase.instance.client
           .from('live_sessions')
-          .insert({
-            'host_id': user.id,
-            'title': title,
-            'channel_name': channelName, 
-            'status': 'live',
-          })
+          .insert({'host_id': user.id, 'title': title, 'channel_name': channelName, 'status': 'live'})
           .select()
           .single();
 
-      final liveId = response['id'].toString();
+      // 2. 🌟 CRÉATION DE L'OBJET LIVESESSION MANUELLEMENT 
+      // (Sécurisé pour éviter les erreurs "fromMap" si des colonnes manquent dans la réponse insert)
+      final liveSession = LiveSession(
+        id: response['id'].toString(),
+        channelName: channelName,
+        title: title,
+        hostId: user.id,
+        hostName: "Moi", // Le nom sera affiché comme "Moi" par défaut
+      );
 
-      // 3. Arrêter le preview
-      if (_isEngineReady && _engine != null) {
-        await _engine!.stopPreview();
-      }
-
+      if (_isEngineReady && _engine != null) await _engine!.stopPreview();
       if (!mounted) return;
 
-      // 4. Lancer l'écran de diffusion
+      // 3. ENVOI DE L'OBJET SESSION À L'ÉCRAN SUIVANT
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (context) => LiveBroadcastScreen(
-            title: title,
+            session: liveSession,
             isVideoEnabled: _isVideoEnabled,
             isMicEnabled: _isMicEnabled,
-            liveId: liveId,           // 🌟 Passé à l'écran suivant
-            channelName: channelName, // 🌟 Passé à l'écran suivant
           ),
         ),
       );
     } catch (e) {
-      debugPrint('Erreur création live: $e');
+      debugPrint('Erreur: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur de connexion : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -132,9 +181,7 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
   @override
   void dispose() {
     _titleController.dispose();
-    if (_isEngineReady && _engine != null) {
-      _engine!.release();
-    }
+    if (_isEngineReady && _engine != null) _engine!.release();
     super.dispose();
   }
 
@@ -155,17 +202,10 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
         children: [
           Positioned.fill(
             child: _isEngineReady && _isVideoEnabled && _engine != null
-                ? AgoraVideoView(
-                    controller: VideoViewController(
-                      rtcEngine: _engine!,
-                      canvas: const VideoCanvas(uid: 0),
-                    ),
-                  )
+                ? AgoraVideoView(controller: VideoViewController(rtcEngine: _engine!, canvas: const VideoCanvas(uid: 0)))
                 : Container(
                     color: const Color(0xFF1E293B),
-                    child: const Center(
-                      child: Icon(Icons.videocam_off_rounded, color: Colors.white24, size: 80),
-                    ),
+                    child: const Center(child: Icon(Icons.videocam_off_rounded, color: Colors.white24, size: 80)),
                   ),
           ),
           Positioned.fill(
@@ -174,11 +214,7 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.4),
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.85),
-                  ],
+                  colors: [Colors.black.withOpacity(0.4), Colors.transparent, Colors.black.withOpacity(0.85)],
                 ),
               ),
             ),
@@ -208,9 +244,7 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
                         isActive: _isMicEnabled,
                         onTap: () {
                           setState(() => _isMicEnabled = !_isMicEnabled);
-                          if (_isEngineReady && _engine != null) {
-                            _engine!.muteLocalAudioStream(!_isMicEnabled);
-                          }
+                          if (_isEngineReady && _engine != null) _engine!.muteLocalAudioStream(!_isMicEnabled);
                         },
                       ),
                       const SizedBox(width: 24),
@@ -234,9 +268,7 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
                         icon: Icons.flip_camera_ios_rounded,
                         isActive: true,
                         onTap: () {
-                          if (_isEngineReady && _engine != null) {
-                            _engine!.switchCamera();
-                          }
+                          if (_isEngineReady && _engine != null) _engine!.switchCamera();
                         },
                       ),
                     ],
@@ -249,22 +281,10 @@ class _LivePrepScreenState extends State<LivePrepScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _isStartingLive ? Colors.grey : _C.red,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        elevation: 8,
-                        shadowColor: _C.red.withOpacity(0.5),
                       ),
-                      child: _isStartingLive 
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.sensors_rounded, color: Colors.white),
-                              SizedBox(width: 10),
-                              Text(
-                                'COMMENCER LE DIRECT',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.0),
-                              ),
-                            ],
-                          ),
+                      child: _isStartingLive
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('COMMENCER LE DIRECT', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
                     ),
                   ),
                   const SizedBox(height: 20),

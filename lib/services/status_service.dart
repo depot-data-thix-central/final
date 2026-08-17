@@ -1,3 +1,4 @@
+// lib/services/status_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -109,18 +110,31 @@ class StatusService {
   Stream<List<StatusUpdate>> streamActiveStatuses() {
     return _poll(() async {
       final now = DateTime.now().toUtc().toIso8601String();
-      final rows = await _client.from(table).select('*').gt('expires_at', now).order('expires_at', ascending: false).order('created_at', ascending: false).limit(200);
-      if (rows is! List) return const <StatusUpdate>[];
-      return rows.map((r) => StatusUpdate.fromRow((r as Map).cast<String, dynamic>())).toList(growable: false);
+      final rows = await _client
+          .from(table)
+          .select('*')
+          .gt('expires_at', now)
+          .order('expires_at', ascending: false)
+          .order('created_at', ascending: false)
+          .limit(200);
+      // `select()` retourne déjà une List<Map<String, dynamic>> ; le type
+      // check et le cast explicites sont donc inutiles.
+      return rows.map(StatusUpdate.fromRow).toList(growable: false);
     });
   }
 
   Stream<List<StatusUpdate>> streamMyActiveStatuses(String uid) {
     return _poll(() async {
       final now = DateTime.now().toUtc().toIso8601String();
-      final rows = await _client.from(table).select('*').eq('uid', uid).gt('expires_at', now).order('expires_at', ascending: false).order('created_at', ascending: false).limit(200);
-      if (rows is! List) return const <StatusUpdate>[];
-      return rows.map((r) => StatusUpdate.fromRow((r as Map).cast<String, dynamic>())).toList(growable: false);
+      final rows = await _client
+          .from(table)
+          .select('*')
+          .eq('uid', uid)
+          .gt('expires_at', now)
+          .order('expires_at', ascending: false)
+          .order('created_at', ascending: false)
+          .limit(200);
+      return rows.map(StatusUpdate.fromRow).toList(growable: false);
     });
   }
 
@@ -218,11 +232,17 @@ class StatusService {
   Future<int> cleanupExpired({int limit = 50}) async {
     try {
       final now = DateTime.now().toUtc().toIso8601String();
-      final expired = await _client.from(table).select('id').lte('expires_at', now).order('expires_at', ascending: true).limit(limit);
-      if (expired is! List) return 0;
+      final expired = await _client
+          .from(table)
+          .select('id')
+          .lte('expires_at', now)
+          .order('expires_at', ascending: true)
+          .limit(limit);
+      // `select()` retourne déjà une List<Map<String, dynamic>> ; le type
+      // check et le cast explicites sont donc inutiles.
       var deleted = 0;
       for (final row in expired) {
-        final id = (row as Map<String, dynamic>)['id'] as String?;
+        final id = row['id'] as String?;
         if (id == null) continue;
         await _client.from(table).delete().eq('id', id);
         deleted++;
