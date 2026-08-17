@@ -1,98 +1,111 @@
-// lib/services/push_notification_service.dart
+// lib/services/local_notification_service.dart
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:thix_id/services/local_notification_service.dart'; // Pour afficher la pop-up
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-class PushNotificationService {
-  PushNotificationService._();
-  static final PushNotificationService instance = PushNotificationService._();
+/// Gère l'affichage des notifications système (pop) sur l'appareil,
+/// qu'elles viennent d'un événement local (Realtime Supabase) ou
+/// d'un message FCM reçu en foreground.
+class LocalNotificationService {
+  LocalNotificationService._();
+  static final LocalNotificationService instance = LocalNotificationService._();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  bool _initialized = false;
+
+  static const String _channelId = 'thix_id_default';
+  static const String _channelName = 'THIX ID';
+  static const String _channelDescription = 'Notifications THIX ID';
+
+  /// Callback appelé quand l'utilisateur tape sur une notification
+  /// (payload = souvent l'id de la notif ou une route à ouvrir).
+  void Function(String? payload)? onNotificationTap;
 
   Future<void> initialize() async {
-    // 1. Demander la permission (surtout pour iOS et Web)
-    NotificationSettings settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
+    if (_initialized) return;
+
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: false, // demandé explicitement via requestPermission()
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      debugPrint('Permission FCM accordée');
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _plugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (response) {
+        onNotificationTap?.call(response.payload);
+      },
+    );
+
+    // Canal Android obligatoire à partir d'Android 8 (API 26+)
+    const androidChannel = AndroidNotificationChannel(
+      _channelId,
+      _channelName,
+      description: _channelDescription,
+      importance: Importance.high,
+    );
+    await _plugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(androidChannel);
+
+    _initialized = true;
+    debugPrint('LocalNotificationService: initialisé');
+  }
+
+  /// Demande la permission d'affichage des notifications (Android 13+ / iOS).
+  /// À appeler une fois, typiquement après connexion de l'utilisateur.
+  Future<bool> requestPermission() async {
+    if (Platform.isAndroid) {
+      final status = await Permission.notification.request();
+      return status.isGranted;
     }
-
-    // 2. Écoute des messages quand l'application est ouverte (Foreground)
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    
-    // 3. Clic sur une notification quand l'app est en arrière-plan (Background)
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
-  }
-
-  /// Gère l'affichage d'une pop-up locale quand l'app est déjà ouverte
-  void _handleForegroundMessage(RemoteMessage message) {
-    debugPrint('Message reçu en premier plan : ${message.notification?.title}');
-    
-    if (message.notification != null) {
-      // On utilise le service local pour forcer l'affichage visuel
-      LocalNotificationService.instance.show(
-        id: message.hashCode, 
-        title: message.notification!.title ?? 'THIX ID',
-        body: message.notification!.body ?? '',
-        // On passe les datas (ex: la route) pour la navigation au clic
-        payload: message.data['route'], 
-      );
+    if (Platform.isIOS) {
+      final granted = await _plugin
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+      return granted ?? false;
     }
+    return true;
   }
 
-  /// Gère le clic sur la notification
-  void _handleNotificationTap(RemoteMessage message) {
-    debugPrint('Notification cliquée avec les données : ${message.data}');
-    // Le clic est intercepté ici. Si tu as mis une 'route' dans ton payload FCM, 
-    // tu pourras rediriger l'utilisateur avec GoRouter plus tard.
-  }
+  Future<void> show({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    if (!_initialized) await initialize();
 
-  /// Appelée par ton AuthManager quand l'utilisateur se connecte avec succès
-  Future<void> onSignedIn({required String userId}) async {
+    const androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+
     try {
-      // 1. Récupérer le token unique de ce téléphone/navigateur
-      String? token = await _messaging.getToken();
-      
-      if (token != null) {
-        debugPrint('FCM Token généré: $token');
-        
-        // 2. Sauvegarder ce token dans Supabase pour ce user précis
-        // (On utilise 'upsert' pour le mettre à jour s'il existe déjà)
-        await Supabase.instance.client.from('fcm_tokens').upsert({
-          'user_id': userId,
-          'token': token,
-          'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-      }
+      await _plugin.show(id, title, body, details, payload: payload);
     } catch (e) {
-      debugPrint('Erreur lors de la sauvegarde du token FCM : $e');
+      debugPrint('LocalNotificationService: show failed err=$e');
     }
   }
 
-  /// Appelée par ton AuthManager quand l'utilisateur se déconnecte
-  Future<void> onSignedOut() async {
-    try {
-      // 1. Récupérer le token actuel pour le supprimer de Supabase
-      String? token = await _messaging.getToken();
-      
-      if (token != null) {
-        await Supabase.instance.client
-            .from('fcm_tokens')
-            .delete()
-            .eq('token', token);
-      }
-      
-      // 2. Supprimer le token de l'appareil localement
-      await _messaging.deleteToken();
-      debugPrint('Token FCM supprimé de Supabase et de l\'appareil');
-    } catch (e) {
-      debugPrint('Erreur lors de la suppression du token FCM : $e');
-    }
-  }
+  Future<void> cancel(int id) => _plugin.cancel(id);
+  Future<void> cancelAll() => _plugin.cancelAll();
 }
