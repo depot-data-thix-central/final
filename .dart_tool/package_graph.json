@@ -83,18 +83,6 @@
       ]
     },
     {
-      "name": "flutter",
-      "version": "0.0.0",
-      "dependencies": [
-        "characters",
-        "collection",
-        "material_color_utilities",
-        "meta",
-        "sky_engine",
-        "vector_math"
-      ]
-    },
-    {
       "name": "permission_handler_android",
       "version": "13.0.0",
       "dependencies": [
@@ -884,21 +872,16 @@
       ]
     },
     {
-      "name": "sky_engine",
+      "name": "flutter",
       "version": "0.0.0",
-      "dependencies": []
-    },
-    {
-      "name": "material_color_utilities",
-      "version": "0.13.0",
       "dependencies": [
-        "collection"
+        "characters",
+        "collection",
+        "material_color_utilities",
+        "meta",
+        "sky_engine",
+        "vector_math"
       ]
-    },
-    {
-      "name": "characters",
-      "version": "1.4.1",
-      "dependencies": []
     },
     {
       "name": "permission_handler_platform_interface",
@@ -936,6 +919,11 @@
         "path",
         "source_span"
       ]
+    },
+    {
+      "name": "meta",
+      "version": "1.19.0",
+      "dependencies": []
     },
     {
       "name": "build_config",
@@ -1299,6 +1287,11 @@
         "matcher",
         "meta"
       ]
+    },
+    {
+      "name": "vector_math",
+      "version": "2.4.2",
+      "dependencies": []
     },
     {
       "name": "clock",
@@ -2413,6 +2406,23 @@
       ]
     },
     {
+      "name": "sky_engine",
+      "version": "0.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "material_color_utilities",
+      "version": "0.13.0",
+      "dependencies": [
+        "collection"
+      ]
+    },
+    {
+      "name": "characters",
+      "version": "1.4.1",
+      "dependencies": []
+    },
+    {
       "name": "source_span",
       "version": "1.10.2",
       "dependencies": [
@@ -2930,16 +2940,6 @@
       "dependencies": [
         "fixnum"
       ]
-    },
-    {
-      "name": "meta",
-      "version": "1.19.0",
-      "dependencies": []
-    },
-    {
-      "name": "vector_math",
-      "version": "2.4.2",
-      "dependencies": []
     }
   ],
   "configVersion": 1
