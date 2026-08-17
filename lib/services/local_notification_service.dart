@@ -1,129 +1,98 @@
-// lib/services/local_notification_service.dart
+// lib/services/push_notification_service.dart
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:thix_id/services/local_notification_service.dart'; // Pour afficher la pop-up
 
-class LocalNotificationService {
-  LocalNotificationService._();
-  static final LocalNotificationService instance = LocalNotificationService._();
+class PushNotificationService {
+  PushNotificationService._();
+  static final PushNotificationService instance = PushNotificationService._();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
-  bool _initialized = false;
-
-  static const String _channelId = 'thix_id_high_importance';
-  static const String _channelName = 'THIX ID Notifications';
-  static const String _channelDescription = 'Notifications importantes de THIX ID';
-
-  /// Callback appelé quand l'utilisateur tape sur une notification.
-  void Function(String? payload)? onNotificationTap;
-
-  /// Alias pour compatibilité
-  Future<void> init() => initialize();
+  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
   Future<void> initialize() async {
-    // 1. Protection Web : on évite d'exécuter du code natif sur navigateur
-    if (_initialized || kIsWeb) return;
-
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false, 
-      requestBadgePermission: false,
-      requestSoundPermission: false,
+    // 1. Demander la permission (surtout pour iOS et Web)
+    NotificationSettings settings = await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
     );
 
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    // 🌟 RETOUR DE TON ASTUCE WEB !
-    // Le cast en 'dynamic' empêche le compilateur dart2js (GitHub Actions)
-    // de crasher sur les signatures non conformes des stubs Web du package.
-    await (_plugin as dynamic).initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: (response) {
-        // En dynamic, response peut être n'importe quoi, on utilise '?' par sécurité
-        debugPrint('🔔 Clic notification -> payload: ${response?.payload}');
-        onNotificationTap?.call(response?.payload);
-      },
-    );
-
-    const androidChannel = AndroidNotificationChannel(
-      _channelId,
-      _channelName,
-      description: _channelDescription,
-      importance: Importance.high,
-      playSound: true,
-      enableVibration: true,
-    );
-
-    await _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(androidChannel);
-
-    _initialized = true;
-    debugPrint('LocalNotificationService: initialisé');
-  }
-
-  Future<bool> requestPermission() async {
-    if (kIsWeb) return true;
-
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      final status = await Permission.notification.request();
-      return status.isGranted;
-    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-      final granted = await _plugin
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
-      return granted ?? false;
-    }
-    return true;
-  }
-
-  Future<void> show({
-    required int id,
-    required String title,
-    required String body,
-    String? payload,
-  }) async {
-    if (kIsWeb) {
-      debugPrint('🔔 [Web Notification] $title: $body');
-      return;
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      debugPrint('Permission FCM accordée');
     }
 
-    if (!_initialized) await initialize();
-
-    const androidDetails = AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-    );
+    // 2. Écoute des messages quand l'application est ouverte (Foreground)
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
+    // 3. Clic sur une notification quand l'app est en arrière-plan (Background)
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+  }
 
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-    try {
-      // 🌟 On cast en dynamic ici aussi pour éviter le crash "Too many positional arguments" lors du build Web
-      await (_plugin as dynamic).show(id, title, body, details, payload: payload);
-    } catch (e) {
-      debugPrint('LocalNotificationService: show failed err=$e');
+  /// Gère l'affichage d'une pop-up locale quand l'app est déjà ouverte
+  void _handleForegroundMessage(RemoteMessage message) {
+    debugPrint('Message reçu en premier plan : ${message.notification?.title}');
+    
+    if (message.notification != null) {
+      // On utilise le service local pour forcer l'affichage visuel
+      LocalNotificationService.instance.show(
+        id: message.hashCode, 
+        title: message.notification!.title ?? 'THIX ID',
+        body: message.notification!.body ?? '',
+        // On passe les datas (ex: la route) pour la navigation au clic
+        payload: message.data['route'], 
+      );
     }
   }
 
-  Future<void> cancel(int id) async {
-    if (!kIsWeb) await (_plugin as dynamic).cancel(id);
+  /// Gère le clic sur la notification
+  void _handleNotificationTap(RemoteMessage message) {
+    debugPrint('Notification cliquée avec les données : ${message.data}');
+    // Le clic est intercepté ici. Si tu as mis une 'route' dans ton payload FCM, 
+    // tu pourras rediriger l'utilisateur avec GoRouter plus tard.
   }
 
-  Future<void> cancelAll() async {
-    if (!kIsWeb) await (_plugin as dynamic).cancelAll();
+  /// Appelée par ton AuthManager quand l'utilisateur se connecte avec succès
+  Future<void> onSignedIn({required String userId}) async {
+    try {
+      // 1. Récupérer le token unique de ce téléphone/navigateur
+      String? token = await _messaging.getToken();
+      
+      if (token != null) {
+        debugPrint('FCM Token généré: $token');
+        
+        // 2. Sauvegarder ce token dans Supabase pour ce user précis
+        // (On utilise 'upsert' pour le mettre à jour s'il existe déjà)
+        await Supabase.instance.client.from('fcm_tokens').upsert({
+          'user_id': userId,
+          'token': token,
+          'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Erreur lors de la sauvegarde du token FCM : $e');
+    }
+  }
+
+  /// Appelée par ton AuthManager quand l'utilisateur se déconnecte
+  Future<void> onSignedOut() async {
+    try {
+      // 1. Récupérer le token actuel pour le supprimer de Supabase
+      String? token = await _messaging.getToken();
+      
+      if (token != null) {
+        await Supabase.instance.client
+            .from('fcm_tokens')
+            .delete()
+            .eq('token', token);
+      }
+      
+      // 2. Supprimer le token de l'appareil localement
+      await _messaging.deleteToken();
+      debugPrint('Token FCM supprimé de Supabase et de l\'appareil');
+    } catch (e) {
+      debugPrint('Erreur lors de la suppression du token FCM : $e');
+    }
   }
 }
