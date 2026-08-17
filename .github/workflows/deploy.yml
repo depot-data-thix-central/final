@@ -41,7 +41,9 @@ jobs:
           fi
 
       - name: Build Web (CanvasKit)
-        run: flutter build web --release --base-href /final/ --no-wasm-dry-run
+        # ⚠️ AJUSTEMENT ICI : /Sona1/ correspond au nom de votre dépôt
+        # Si votre dépôt a un autre nom, remplacez Sona1 par ce nom exact
+        run: flutter build web --release --base-href /Sona1/ --no-wasm-dry-run --no-tree-shake-icons
 
       - name: Deploy to GitHub Pages (Branch gh-pages)
         uses: peaceiris/actions-gh-pages@v3
